@@ -1,0 +1,36 @@
+version: '3.9'
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/mindlog_db
+    depends_on:
+      - db
+
+  ai-server:
+    build: ./ai-server
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ai-server:/app
+    environment:
+      - MODEL_PATH=/app/models/model.pth
+
+  db:
+    image: postgres:13
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mindlog_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

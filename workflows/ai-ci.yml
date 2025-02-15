@@ -1,0 +1,26 @@
+name: AI Server CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - feature/ai-*
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install -r ai-server/requirements.txt
+
+      - name: Run AI model tests
+        run: pytest ai-server/tests/

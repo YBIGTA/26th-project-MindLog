@@ -1,1 +1,1 @@
-# 26th-project-MindLog
+mindlog
