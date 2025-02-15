@@ -1,6 +1,6 @@
 # Created by https://www.toptal.com/developers/gitignore/api/swift,python
 # Edit at https://www.toptal.com/developers/gitignore?templates=swift,python
-
+ai-server/data/dataset.csv
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
