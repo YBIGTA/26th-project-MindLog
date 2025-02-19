@@ -17,8 +17,8 @@ services:
       - "8001:8001"
     volumes:
       - ./ai-server:/app
-    environment:
-      - MODEL_PATH=/app/models/model.pth
+    environment: []
+    # - MODEL_PATH=/app/models/model.pth
 
   db:
     image: postgres:13
