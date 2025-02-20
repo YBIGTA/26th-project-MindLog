@@ -10,15 +10,16 @@ class LocationTagger:
         self.headers = {"User-Agent": user_agent}
 
     def convert_to_decimal(self, gps_value):
-        """ GPS 분수 좌표를 소수점 좌표로 변환 """
+        """ 🔹 GPS 좌표를 소수점 형식으로 변환 """
         return float(gps_value[0]) + float(gps_value[1]) / 60 + float(gps_value[2].num) / float(gps_value[2].den) / 3600
 
     def get_gps_from_exif(self, image_url: str):
-        """ 이미지의 EXIF 데이터에서 GPS 정보를 추출하는 함수 """
+        """ 🔹 이미지의 EXIF 데이터에서 GPS 정보를 추출 (URL 지원 강화) """
         try:
-            response = requests.get(image_url)
-            image = Image.open(BytesIO(response.content))
-            tags = exifread.process_file(image.fp)
+            response = requests.get(image_url, headers=self.headers, timeout=5)
+            response.raise_for_status()
+            image_bytes = BytesIO(response.content)  # 🔹 URL에서 이미지 바이트로 변환
+            tags = exifread.process_file(image_bytes)  # 🔹 EXIF 데이터 처리
 
             if 'GPS GPSLatitude' in tags and 'GPS GPSLongitude' in tags:
                 lat_values = tags['GPS GPSLatitude'].values
@@ -34,13 +35,15 @@ class LocationTagger:
 
                 print(f"✅ {image_url} → GPS 좌표: ({lat}, {lon})")
                 return lat, lon
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ {image_url} → 이미지 요청 실패: {e}")
         except Exception as e:
-            print(f"⚠️ {image_url} → GPS 데이터 읽기 실패: {e}")
+            print(f"⚠️ {image_url} → EXIF 데이터 처리 실패: {e}")
 
         return None, None  # GPS 정보가 없는 경우
 
     def get_full_address(self, lat, lon):
-        """ OpenStreetMap API를 활용하여 GPS 좌표를 전체 주소로 변환 """
+        """ 🔹 OpenStreetMap API를 활용한 GPS → 주소 변환 """
         if lat is None or lon is None:
             print("⚠️ GPS 정보 없음 → 주소 변환 불가")
             return None
@@ -60,7 +63,7 @@ class LocationTagger:
         return None
 
     def extract_best_region_tag(self, address):
-        """ OpenStreetMap에서 가져온 주소에서 최적의 지역 태그 추출 """
+        """ 🔹 OpenStreetMap에서 최적의 지역 태그 추출 """
         if not address:
             print("🚨 주소 정보 없음 → 지역 태그 생성 불가")
             return None
@@ -73,7 +76,7 @@ class LocationTagger:
         return None
 
     def predict_locations(self, image_urls: list[str]) -> dict:
-        """ 🔹 GPS 정보가 없더라도 '지역 태그 없음'을 반환하고 계속 진행 """
+        """ 🔹 이미지 URL 리스트에 대한 지역 태깅 수행 """
         results = {}
         for image_url in image_urls:
             try:

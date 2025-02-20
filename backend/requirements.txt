@@ -1,0 +1,26 @@
+# FastAPI 기본 라이브러리
+fastapi==0.103.1
+uvicorn==0.23.2
+
+# PostgreSQL 연동 (SQLAlchemy)
+sqlalchemy==2.0.21
+asyncpg==0.28.0
+psycopg2-binary==2.9.9
+
+# Alembic (DB 마이그레이션)
+alembic==1.11.3
+
+# Pydantic (데이터 검증)
+pydantic==2.4.2
+pydantic-settings==2.0.3
+pydantic[email]==2.4.2
+
+# JWT 인증 (보안)
+python-jose==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+pyjwt==2.8.0
+python-multipart==0.0.6 
+
+# 환경 변수 로드
+python-dotenv==1.0.0

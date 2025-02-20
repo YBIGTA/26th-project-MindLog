@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from models.place_tag import PlaceTagger
-from models.location_tag import LocationTagger
-from models.companion_tag import CompanionTagger
+from app.models.place_tag import PlaceTagger
+from app.models.location_tag import LocationTagger
+from app.models.companion_tag import CompanionTagger
 from typing import List, Dict
 from pydantic import BaseModel, Field
 
@@ -19,7 +19,16 @@ companion_tagger = CompanionTagger()
 
 @router.post("/generate-tags")
 async def generate_tags(request: TaggingRequest):
+    """
+    🔹 AI 태깅 엔드포인트
+    - 장소 태깅 (CLIP)
+    - 지역 태깅 (GPS → 주소 변환)
+    - 인물 태깅 (DeepFace + DB 비교)
+    """
     try:
+        results = []
+        updated_face_database = request.face_database.copy()
+
         # ✅ 장소 태깅
         try:
             place_tags = place_tagger.predict_places(request.image_urls)
@@ -37,15 +46,14 @@ async def generate_tags(request: TaggingRequest):
         # ✅ 인물 태깅 수행 (배치 내 클러스터링 + 기존 DB 비교)
         try:
             companion_tags, updated_face_database = companion_tagger.process_faces(
-                request.image_urls, request.face_database
+                request.image_urls, request.face_database  # ✅ 오류 해결
             )
+
         except Exception as e:
             print(f"⚠️ 인물 태깅 실패: {e}")
             companion_tags = {url: {"error": "인물 태그 생성 실패"} for url in request.image_urls}
-            updated_face_database = request.face_database
 
-        # ✅ 이미지별 태그 응답 형식으로 변환
-        results = []
+        # ✅ 이미지별 태그 응답 구조화
         for url in request.image_urls:
             results.append({
                 "image_url": url,
@@ -56,7 +64,7 @@ async def generate_tags(request: TaggingRequest):
 
         return {
             "results": results,
-            "updated_face_database": updated_face_database
+            "updated_face_database": updated_face_database  # 업데이트된 얼굴 DB 반환
         }
 
     except Exception as e:

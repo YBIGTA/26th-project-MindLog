@@ -1,36 +1,58 @@
-version: '3.9'
+version: "3.9"
+
 services:
   backend:
     build: ./backend
+    container_name: fastapi-backend
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
-    environment:
-      - DATABASE_URL=postgresql://user:password@db:5432/mindlog_db
     depends_on:
       - db
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=mindlog
+      - POSTGRES_PASSWORD=securepassword
+      - POSTGRES_DB=mindlog_db
+    volumes:
+      - ./backend:/app
+    networks:
+      - mindlog-network
 
   ai-server:
     build: ./ai-server
+    container_name: fastapi-ai-server
     ports:
       - "8001:8001"
+    depends_on:
+      - db
+    environment:
+      - CUDA_VISIBLE_DEVICES=-1  # ✅ TensorFlow GPU 비활성화 (CPU에서 실행)
     volumes:
       - ./ai-server:/app
-    environment: []
-    # - MODEL_PATH=/app/models/model.pth
+      - deepface_cache:/root/.deepface/weights  # ✅ DeepFace 캐시 유지
+    networks:
+      - mindlog-network
 
   db:
     image: postgres:13
+    container_name: postgres-db
     restart: always
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: mindlog_db
     ports:
       - "5432:5432"
+    environment:
+      POSTGRES_USER: mindlog
+      POSTGRES_PASSWORD: securepassword
+      POSTGRES_DB: mindlog_db
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - mindlog-network
 
 volumes:
   pgdata:
+  deepface_cache:  # ✅ DeepFace 캐시 볼륨 추가
+
+networks:
+  mindlog-network:
+    driver: bridge
