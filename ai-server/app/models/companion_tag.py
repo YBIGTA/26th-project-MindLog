@@ -106,15 +106,15 @@ class CompanionTagger:
 
             if best_match:
                 updated_tags[img_path] = best_match
-                self.face_database[best_match]["embeddings"].append(embedding)
-                self.face_database[best_match]["faces"].append(face_img)
+                self.face_database[best_match]["embeddings"].append(embedding.tolist())  # ✅ Numpy 배열을 리스트로 변환
+                self.face_database[best_match]["faces"].append(face_img.tolist())  # ✅ OpenCV 배열을 리스트로 변환
                 self.face_database[best_match]["image_paths"].append(img_path)
             else:
                 new_person_tag = f"person_{next_person_id}"
                 updated_tags[img_path] = new_person_tag
                 self.face_database[new_person_tag] = {
-                    "embeddings": [embedding],
-                    "faces": [face_img],
+                    "embeddings": [embedding.tolist()],  # ✅ JSON 변환 가능하도록 리스트 변환
+                    "faces": [face_img.tolist()],  # ✅ JSON 변환 가능하도록 리스트 변환
                     "image_paths": [img_path],
                 }
                 next_person_id += 1

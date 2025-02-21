@@ -24,7 +24,7 @@ class PlaceTagger:
                 image = Image.open(image_path).convert("RGB")  # 🔹 로컬 파일 로드
             return self.preprocess(image).unsqueeze(0).to(self.device)
         except Exception as e:
-            print(f"⚠️ 이미지 로드 실패: {e}")
+            print(f"⚠️ 이미지 로드 실패: {image_path}, 오류: {e}")
             return None
 
     def predict_places(self, image_urls: list[str], top_k=3) -> dict:
@@ -35,10 +35,14 @@ class PlaceTagger:
         """
         results = {}
 
+        print(f"🚀 장소 태깅 시작: {len(image_urls)}개의 이미지 처리 중...")  # ✅ 전체 처리 시작 로그
+
         for image_url in image_urls:
+            print(f"🔍 장소 태깅 진행 중: {image_url}")  # ✅ 개별 이미지 처리 로그
             image = self.load_image(image_url)
             if image is None:
                 results[image_url] = {"error": "이미지 로드 실패"}
+                print(f"⚠️ 장소 태깅 실패: {image_url} → 이미지 로드 실패")  # ✅ 실패 로그 추가
                 continue
 
             try:
@@ -58,10 +62,14 @@ class PlaceTagger:
                             "place": places.get(valid_places[0][0], valid_places[0][0]),
                             "confidence": valid_places[0][1]
                         }
+                        print(f"✅ 장소 태깅 완료: {image_url} → {results[image_url]}")  # ✅ 성공 로그 추가
                     else:
                         results[image_url] = {"error": "No valid place detected"}
+                        print(f"⚠️ 장소 태깅 실패: {image_url} → No valid place detected")  # ✅ 실패 로그 추가
 
             except Exception as e:
                 results[image_url] = {"error": str(e)}
+                print(f"❌ 장소 태깅 오류: {image_url}, 오류: {e}")  # ✅ 예외 발생 시 로그
 
+        print("✅ 장소 태깅 프로세스 완료")  # ✅ 전체 프로세스 완료 로그
         return results
