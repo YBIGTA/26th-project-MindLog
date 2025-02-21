@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, diary, music
+from app.routers import auth, diary
 from app.database import Base, engine
 
 # ✅ DB 테이블 자동 생성 (개발용, Alembic을 사용할 경우 생략 가능)
