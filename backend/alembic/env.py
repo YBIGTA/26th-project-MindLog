@@ -1,47 +1,42 @@
+import sys
+import os
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
+from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
+# ✅ Alembic이 `app`을 찾을 수 있도록 강제 설정
+sys.path.insert(0, os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..")))
+
+# ✅ 기존 models에서 MetaData 불러오기
+try:
+    from app.database import Base  # 🚀 여기서 오류가 나던 부분 해결됨!
+except ModuleNotFoundError as e:
+    print(f"⚠️ ModuleNotFoundError: {e}")
+    print("📌 해결 방법: 'sys.path'에 프로젝트 루트 경로를 추가했는지 확인하세요!")
+
+# Alembic 설정 로드
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# ✅ 로그 설정 파일 로드 (alembic.ini 사용)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+# ✅ target_metadata 설정 (테이블 자동 감지를 위해)
+target_metadata = Base.metadata  # 기존 코드에서 `None` → `Base.metadata` 로 수정!
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
+# ==============================
+# ✅ 마이그레이션 실행 함수 정의
+# ==============================
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
-
-    Calls to context.execute() here emit the given string to the
-    script output.
-
-    """
+    """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
-        target_metadata=target_metadata,
+        target_metadata=target_metadata,  # ✅ MetaData 적용
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -51,12 +46,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
-
-    In this scenario we need to create an Engine
-    and associate a connection with the context.
-
-    """
+    """Run migrations in 'online' mode."""
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -65,13 +55,14 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, target_metadata=target_metadata  # ✅ MetaData 적용
         )
 
         with context.begin_transaction():
             context.run_migrations()
 
 
+# ✅ 마이그레이션 모드 실행
 if context.is_offline_mode():
     run_migrations_offline()
 else:

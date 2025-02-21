@@ -27,7 +27,7 @@ app.add_middleware(
 
 # ✅ 라우터 등록 (API 엔드포인트 설정)
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-# app.include_router(diary.router, prefix="/diary", tags=["Diary"])
+app.include_router(diary.router, tags=["Diary"])
 # app.include_router(music.router, prefix="/music", tags=["Music"])
 
 # ✅ 기본 엔드포인트
