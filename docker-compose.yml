@@ -14,10 +14,16 @@ services:
       - POSTGRES_USER=mindlog
       - POSTGRES_PASSWORD=securepassword
       - POSTGRES_DB=mindlog_db
+      - FASTAPI_HOST=0.0.0.0  # ✅ 환경 변수로 FastAPI 외부 접속 허용
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
     volumes:
       - ./backend:/app  # ✅ backend 전체를 /app으로 마운트
     networks:
       - mindlog-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000  # ✅ FastAPI 외부 접근 가능하도록 수정
 
   db:
     image: postgres:13

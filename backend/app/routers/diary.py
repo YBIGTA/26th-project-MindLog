@@ -1,65 +1,79 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
 from sqlalchemy.orm import Session
+from typing import List
 from app.database import get_db
 from app.models.diary_model import Diary, Image, Tag, ImageTag
-from app.schemas.diary_schema import DiaryCreate, DiaryResponse
+from app.schemas.diary_schema import DiaryResponse
 from app.routers.auth import get_current_user
-import uuid
-from typing import List
+from app.core.config import s3_client, settings  # ✅ S3 클라이언트 임포트
 
 router = APIRouter(prefix="/diary", tags=["Diary"])
 
 
 @router.post("/", response_model=DiaryResponse, status_code=status.HTTP_201_CREATED)
-def create_diary(
-    diary_data: DiaryCreate,
+async def create_diary(
+    date: str = Form(...),  # ✅ Form 데이터로 받기
+    emotions: str = Form(...),  # ✅ emotions 리스트 → JSON 문자열로 전달
+    text: str = Form(...),
+    images: List[UploadFile] = File(...),  # ✅ 여러 개의 이미지 파일을 받음
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
     new_diary = Diary(
         id=uuid.uuid4(),
         user_id=user.id,
-        date=diary_data.date,
-        emotions=", ".join(diary_data.emotions),  # ✅ 리스트 → 문자열 변환
-        text=diary_data.text,
+        date=date,
+        emotions=emotions,
+        text=text,
     )
     db.add(new_diary)
     db.flush()
 
-    # ✅ 이미지 URL 저장 및 태그 하드코딩
     image_urls = []
-    ai_results = {}
-    if len(diary_data.image_urls) > 0:
-        ai_results[diary_data.image_urls[0]] = [
-            {"type": "인물", "tag_name": "친구"},
-            {"type": "장소", "tag_name": "공원"}
-        ]
-    if len(diary_data.image_urls) > 1:
-        ai_results[diary_data.image_urls[1]] = [
-            {"type": "음식", "tag_name": "커피"},
-            {"type": "장소", "tag_name": "카페"}
-        ]
-
     tags = set()
-    for url in diary_data.image_urls:
-        new_image = Image(
-            id=uuid.uuid4(), diary_id=new_diary.id, image_url=url)
-        db.add(new_image)
-        image_urls.append(url)
 
-        for tag in ai_results.get(url, []):
-            existing_tag = db.query(Tag).filter(
-                Tag.tag_name == tag["tag_name"]).first()
-            if not existing_tag:
-                existing_tag = Tag(
-                    id=uuid.uuid4(), type=tag["type"], tag_name=tag["tag_name"])
-                db.add(existing_tag)
+    # ✅ 1️⃣ 이미지 S3 업로드
+    for image in images:
+        file_extension = image.filename.split(".")[-1]
+        s3_filename = f"{uuid.uuid4()}.{file_extension}"
+
+        # S3 업로드
+        s3_client.upload_fileobj(
+            image.file, settings.AWS_S3_BUCKET_NAME, s3_filename)
+
+        # ✅ 업로드된 이미지 URL 생성
+        s3_url = f"https://{settings.AWS_S3_BUCKET_NAME}.s3.amazonaws.com/{s3_filename}"
+        image_urls.append(s3_url)
+
+        # ✅ 이미지 정보 저장
+        new_image = Image(
+            id=uuid.uuid4(), diary_id=new_diary.id, image_url=s3_url)
+        db.add(new_image)
+        db.flush()
+
+        # ✅ 2️⃣ AI 서버 응답 하드코딩 (이미지별 태그 적용)
+        ai_tags = [
+            {"type": "장소", "tag_name": "카페"},
+            {"type": "음식", "tag_name": "커피"},
+        ] if len(image_urls) % 2 == 0 else [
+            {"type": "인물", "tag_name": "친구"},
+            {"type": "장소", "tag_name": "공원"},
+        ]
+
+        # ✅ 3️⃣ 태그 저장 및 `image_tag` 매핑
+        for tag_data in ai_tags:
+            tag = db.query(Tag).filter(
+                Tag.tag_name == tag_data["tag_name"]).first()
+            if not tag:
+                tag = Tag(id=uuid.uuid4(),
+                          type=tag_data["type"], tag_name=tag_data["tag_name"])
+                db.add(tag)
                 db.flush()
 
-            new_imagetag = ImageTag(
-                image_id=new_image.id, tag_id=existing_tag.id)
-            db.add(new_imagetag)
-            tags.add(existing_tag)
+            new_image_tag = ImageTag(image_id=new_image.id, tag_id=tag.id)
+            db.add(new_image_tag)
+            tags.add(tag)
 
     db.commit()
     db.refresh(new_diary)
@@ -68,7 +82,7 @@ def create_diary(
         id=new_diary.id,
         date=new_diary.date,
         image_urls=image_urls,
-        emotions=diary_data.emotions,
+        emotions=emotions.split(", "),
         text=new_diary.text,
         tags=[{"id": tag.id, "type": tag.type, "tag_name": tag.tag_name}
               for tag in tags],
