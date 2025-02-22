@@ -2,7 +2,6 @@ import requests
 import exifread
 import time
 from typing import Dict
-from PIL import Image
 from io import BytesIO
 
 class LocationTagger:
@@ -14,7 +13,7 @@ class LocationTagger:
         return float(gps_value[0]) + float(gps_value[1]) / 60 + float(gps_value[2].num) / float(gps_value[2].den) / 3600
 
     def get_gps_from_exif(self, image_url: str):
-        """ 🔹 이미지의 EXIF 데이터에서 GPS 정보를 추출 (URL 지원 강화) """
+        """ 🔹 이미지의 EXIF 데이터에서 GPS 정보를 추출 (URL에서 직접 다운로드) """
         try:
             response = requests.get(image_url, headers=self.headers, timeout=5)
             response.raise_for_status()
@@ -76,11 +75,11 @@ class LocationTagger:
         return None
 
     def predict_locations(self, image_urls: list[str]) -> dict:
-        """ 🔹 이미지 URL 리스트에 대한 지역 태깅 수행 """
+        """ 🔹 이미지 URL 리스트에 대한 지역 태깅 수행 (원래 방식 복원) """
         results = {}
         for image_url in image_urls:
             try:
-                lat, lon = self.get_gps_from_exif(image_url)
+                lat, lon = self.get_gps_from_exif(image_url)  # ✅ 이미지 URL에서 직접 GPS 추출
                 if lat is None or lon is None:
                     print(f"⚠️ {image_url} → GPS 정보 없음 → 기본값 반환")
                     results[image_url] = {"error": "지역 태그 없음"}
