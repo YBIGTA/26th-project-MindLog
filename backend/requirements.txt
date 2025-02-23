@@ -34,3 +34,4 @@ requests==2.31.0
 
 # ✅ 이미지 처리 라이브러리 (EXIF 데이터 유지용)
 pillow==10.0.0
+piexif
