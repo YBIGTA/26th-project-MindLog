@@ -138,12 +138,11 @@ struct ArchiveRecentLogView: View {
     
     // 이미지 URL 배열에서 첫 번째 이미지 선택
     private func getFirstImage(from urls: [String]) -> String {
-        guard !urls.isEmpty else { 
+        guard let firstUrl = urls.first else { 
             print("❌ 이미지 URL 배열이 비어있음")
             return "" 
         }
-        let firstUrl = urls[0]
-        print("✅ 선택된 이미지 URL:", firstUrl)
+        print("✅ 첫 번째 이미지 URL:", firstUrl)
         return firstUrl
     }
     

@@ -7,38 +7,57 @@ struct SavedLogView: View {
     let diaryResponse: DiaryResponse
     @State private var audioPlayer: AVAudioPlayer?
     @State private var isPlaying: Bool = false
+    @State private var selectedImage: String?
+    @State private var showFullScreenImage = false
     let isFromWriteView: Bool
     @Environment(\.presentationMode) private var presentationMode
     
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 0) {
-                // 상단 헤더
-                VStack(alignment: .leading, spacing: 4) {
-                    DiaryTitle(
-                        title: formatDateToKorean(diaryResponse.date),
-                        buttonIcon: nil,
-                        menuItems: []
-                    )
-                }
-                .padding(.bottom, 30)
-                
-                // 이미지 갤러리
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                        ForEach(diaryResponse.image_urls, id: \.self) { urlString in
-                            AsyncImage(url: URL(string: urlString)) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 237)
-                                    .frame(height: 348)
-                                    .clipped()
-                                    .cornerRadius(10)
-                            } placeholder: {
-                                Color.gray
-                                    .frame(width: 237, height: 348)
-                                    .cornerRadius(10)
+        ZStack {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    // 상단 헤더
+                    VStack(alignment: .leading, spacing: 4) {
+                        DiaryTitle(
+                            title: formatDateToKorean(diaryResponse.date),
+                            buttonIcon: nil,
+                            menuItems: []
+                        )
+                    }
+                    .padding(.bottom, 30)
+                    
+                    // 이미지 갤러리
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            ForEach(diaryResponse.image_urls, id: \.self) { urlString in
+                                if let url = URL(string: urlString) {
+                                    AsyncImage(url: url) { phase in
+                                        switch phase {
+                                        case .empty:
+                                            ProgressView()
+                                                .frame(width: 237, height: 348)
+                                        case .success(let image):
+                                            image
+                                                .resizable()
+                                                .scaledToFill()
+                                                .frame(width: 237, height: 348)
+                                                .clipped()
+                                                .cornerRadius(10)
+                                                .onTapGesture {
+                                                    selectedImage = urlString
+                                                    showFullScreenImage = true
+                                                }
+                                        case .failure:
+                                            Color.gray
+                                                .frame(width: 237, height: 348)
+                                                .cornerRadius(10)
+                                        @unknown default:
+                                            Color.gray
+                                                .frame(width: 237, height: 348)
+                                                .cornerRadius(10)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -103,10 +122,10 @@ struct SavedLogView: View {
                 
                 Spacer()
             }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black)
         }
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
         .overlay(
             FloatingButtonContainer(buttons: [
                 FloatingButton(
@@ -135,6 +154,49 @@ struct SavedLogView: View {
             .padding(.bottom, 16),
             alignment: .bottom
         )
+        .sheet(isPresented: $showFullScreenImage) {
+            if let imageUrlString = selectedImage, 
+               let imageUrl = URL(string: imageUrlString) {
+                ZStack {
+                    Color.black.edgesIgnoringSafeArea(.all)
+                    
+                    AsyncImage(url: imageUrl) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                                .foregroundColor(.white)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .edgesIgnoringSafeArea(.all)
+                        case .failure:
+                            Text("이미지를 불러올 수 없습니다")
+                                .foregroundColor(.white)
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                    
+                    // 닫기 버튼
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button {
+                                showFullScreenImage = false
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 30))
+                                    .foregroundColor(.white)
+                                    .padding(20)
+                            }
+                        }
+                        Spacer()
+                    }
+                }
+                .background(Color.black)
+            }
+        }
         .navigationBarHidden(true)
         .onAppear {
             setupAudio()
@@ -199,7 +261,7 @@ struct SavedLogView: View {
         let month = calendar.component(.month, from: date)
         let day = calendar.component(.day, from: date)
         
-        return "\(year)년 \(month)월 \(day)일의 로그"
+        return "\(year)년 \(month)월 \(day)일"
     }
     
     private func formatDate(_ dateString: String) -> String {

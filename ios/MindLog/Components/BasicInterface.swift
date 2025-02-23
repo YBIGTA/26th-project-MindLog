@@ -69,27 +69,27 @@ struct Heading: View {
     }
 }
 // ✅ 미리보기
-struct Heading_Previews: PreviewProvider {
-    static var previews: some View {
-        VStack(spacing: 20) {
-            // 일반 헤딩 (버튼 없음)
-            Heading(title: "Archive", buttonIcon: nil, menuItems: [])
-            
-            // 드롭다운 메뉴 버튼 포함
-            Heading(title: "MindLog.", buttonIcon: "chevron.down", menuItems: [
-                MenuItem(title: "Settings", isSelected: false, action: {}),
-                MenuItem(title: "Profile", isSelected: false, action: {}),
-                MenuItem(title: "Logout", isSelected: false, action: {})
-            ])
-            
-            // 캘린더 버튼이 있는 경우
-            Heading(title: "Select Date", buttonIcon: "calendar", menuItems: [])
-        }
-        .padding()
-        .previewLayout(.sizeThatFits)
-        .background(Color.black)
-    }
-}
+//struct Heading_Previews: PreviewProvider {
+//    static var previews: some View {
+//        VStack(spacing: 20) {
+//            // 일반 헤딩 (버튼 없음)
+//            Heading(title: "Archive", buttonIcon: nil, menuItems: [])
+//            
+//            // 드롭다운 메뉴 버튼 포함
+//            Heading(title: "MindLog.", buttonIcon: "chevron.down", menuItems: [
+//                MenuItem(title: "Settings", isSelected: false, action: {}),
+//                MenuItem(title: "Profile", isSelected: false, action: {}),
+//                MenuItem(title: "Logout", isSelected: false, action: {})
+//            ])
+//            
+//            // 캘린더 버튼이 있는 경우
+//            Heading(title: "Select Date", buttonIcon: "calendar", menuItems: [])
+//        }
+//        .padding()
+//        .previewLayout(.sizeThatFits)
+//        .background(Color.black)
+//    }
+//}
 
 struct FloatingButton: View {
     let icon: String
@@ -179,16 +179,16 @@ struct ExpandableCategoryButton: View {
     }
 }
 
-//struct ExpandableCategoryButton_Previews: PreviewProvider {
-//    static var previews: some View {
-//        VStack(spacing: 20) {
-//            ExpandableCategoryButton(category: ("도시", "5개의 로그"), onCategorySelected: { _ in }, isSelected: false)
-//        }
-//        .padding()
-//        .background(Color.black)
-//        .previewLayout(.sizeThatFits)
-//    }
-//}
+struct ExpandableCategoryButton_Previews: PreviewProvider {
+    static var previews: some View {
+        VStack(spacing: 20) {
+            ExpandableCategoryButton(category: ("도시", "5개의 로그"), onCategorySelected: { _ in }, isSelected: false)
+        }
+        .padding()
+        .foregroundColor(Color(hex: "2c3e50"))
+        .previewLayout(.sizeThatFits)
+    }
+}
 
 // ✅ 사용자가 원하는 만큼 버튼을 넣을 수 있도록 개선
 struct FloatingButtonContainer: View {

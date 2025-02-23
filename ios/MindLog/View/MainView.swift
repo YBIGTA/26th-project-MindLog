@@ -221,18 +221,17 @@ struct MainView: View {
             print("📍 Fetched responses:", responses)
             
             await MainActor.run {
-                // responses를 created_at 기준으로 내림차순 정렬 후 상위 5개 선택
                 self.diaryEntries = responses
-                    .sorted { $0.created_at > $1.created_at } // created_at 기준 내림차순 정렬
+                    .sorted { $0.created_at > $1.created_at }
                     .prefix(5)
                     .map { response in
-                        let randomImageUrl = response.image_urls.isEmpty ? "" : response.image_urls.randomElement()!
-                        print("📍 Selected Image URL:", randomImageUrl)
+                        let firstImageUrl = response.image_urls.first ?? ""
+                        print("📍 Selected First Image URL:", firstImageUrl)
                         
                         return DiaryEntry(
                             id: response.id,
                             date: formatDate(from: response.date),
-                            imageUrl: randomImageUrl,
+                            imageUrl: firstImageUrl,
                             text: response.text ?? ""
                         )
                     }
@@ -345,7 +344,7 @@ struct DiaryCardView: View {
                     .frame(width: 200, height: 300)
                     .cornerRadius(15)
                     .onAppear {
-                        print("⚠️ Empty image URL")
+                        print("⚠️ No image available")
                     }
             }
             
