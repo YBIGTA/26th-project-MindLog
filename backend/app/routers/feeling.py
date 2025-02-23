@@ -5,6 +5,7 @@ from typing import Dict
 from collections import Counter
 from app.database import get_db
 from app.models.diary_model import Diary
+import urllib.parse
 
 router = APIRouter(
     tags=["Feeling"]
@@ -82,17 +83,22 @@ def get_feeling_distribution(year: int, db: Session = Depends(get_db)):
 # 🟢 3. 특정 감정의 월별 출현 횟수 조회
 
 
-@router.get("/{emotion}")
+@router.get("/feeling/{emotion}")
 def get_monthly_feeling_count(emotion: str, year: int, db: Session = Depends(get_db)):
+    """ 특정 감정이 등장한 월별 횟수를 조회 """
+
+    # ✅ URL 인코딩된 감정 값을 디코딩
+    decoded_emotion = urllib.parse.unquote(emotion)
+
     feelings = db.query(Diary.date).filter(
-        Diary.emotions == emotion,
+        Diary.emotions.like(f"%{decoded_emotion}%"),  # ✅ 감정이 포함된 다이어리 조회
         Diary.date >= f"{year}-01-01",
         Diary.date <= f"{year}-12-31"
     ).all()
 
     if not feelings:
-        raise HTTPException(
-            status_code=404, detail="No data found for the given emotion and year")
+        return {m: 0 for m in ["JAN", "FEB", "MAR", "APR",
+                               "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]}
 
     month_count = {m: 0 for m in ["JAN", "FEB", "MAR", "APR",
                                   "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]}

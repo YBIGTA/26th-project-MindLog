@@ -12,6 +12,8 @@ from app.schemas.diary_schema import DiaryResponse
 from app.routers.auth import get_current_user
 from app.core.config import s3_client, settings  # ✅ S3 클라이언트 임포트
 from datetime import datetime, timedelta, timezone
+from calendar import monthrange
+from fastapi import Query
 
 router = APIRouter(prefix="/diary", tags=["Diary"])
 
@@ -147,26 +149,30 @@ async def create_diary(
 
 @router.get("/", response_model=List[DiaryResponse])
 def get_diary_list(
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
-    year: Optional[int] = None,
-    month: Optional[int] = None,
 ):
-    """다이어리 목록 조회 (쿼리 없으면 최신 10개, 특정 연/월 지정 가능, 최대 33개)"""
+    """최신순으로 다이어리 조회 (쿼리 없으면 최근 10개)"""
 
     query = db.query(Diary).filter(Diary.user_id == user.id)
 
-    # ✅ 특정 연/월로 필터링
-    if year:
-        query = query.filter(
-            Diary.date >= f"{year}-01-01", Diary.date <= f"{year}-12-31")
-    if month:
-        query = query.filter(
-            Diary.date >= f"{year}-{month:02d}-01", Diary.date <= f"{year}-{month:02d}-31")
+    if year and month:
+        # ✅ 해당 연도의 월 마지막 날짜 구하기
+        last_day_of_month = monthrange(year, month)[1]  # ex) 2월이면 28 or 29
 
-    # ✅ 최신순 정렬 후 최대 개수 제한 (기본 10개, 최대 33개)
-    diaries = query.order_by(Diary.date.desc()).limit(
-        33 if (year or month) else 10).all()
+        # ✅ 해당 월에 해당하는 다이어리만 조회
+        query = query.filter(
+            Diary.date >= f"{year}-{month:02d}-01",
+            Diary.date <= f"{year}-{month:02d}-{last_day_of_month}"
+        )
+        max_items = 33  # ✅ 최대 33개
+    else:
+        max_items = 10  # ✅ 기본 10개
+
+    # ✅ 최신순 정렬 후 제한 개수 적용
+    diaries = query.order_by(Diary.date.desc()).limit(max_items).all()
 
     response = []
     for diary in diaries:
