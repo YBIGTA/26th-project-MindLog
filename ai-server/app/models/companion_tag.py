@@ -150,7 +150,7 @@ class CompanionTagger:
         
         return result
 
-    def match_with_database(self, assigned_tags, face_data, threshold=0.8):
+    def match_with_database(self, assigned_tags, face_data, threshold=0.6):
         '''클러스터링된 얼굴을 DB와 매칭'''
         result = {}
         
@@ -268,14 +268,15 @@ class CompanionTagger:
             for cluster_id in cluster_ids:
                 # 해당 클러스터의 대표 임베딩 찾기
                 cluster_embedding = None
-                for face_url, embedding in face_data:
-                    if face_url == url:
+                current_face_idx = face_idx[url]
+                for i, (face_url, embedding) in enumerate(face_data):
+                    if face_url == url and i == current_face_idx:  # 현재 처리 중인 얼굴의 임베딩을 정확히 찾음
                         cluster_embedding = embedding
                         break
-            
+                
                 if cluster_embedding is None:
                     continue
-            
+                
                 # DB의 각 인물과 비교
                 best_match = None
                 max_similarity = -1
@@ -284,11 +285,18 @@ class CompanionTagger:
                     for db_data in person_data["embeddings"]:
                         similarity = 1 - cosine(cluster_embedding, np.array(db_data["embedding"]))
                         print(f"- 유사도 체크: {cluster_id} vs {person_id} → {similarity:.3f}")
-                        if similarity > max_similarity and similarity >= 0.7:
+                        if similarity > max_similarity:
                             max_similarity = similarity
-                            best_match = person_id
+                            if similarity >= 0.55:  # 0.6 → 0.55로 임계값 낮춤
+                                best_match = person_id
+                            print(f"  → max_similarity 갱신: {similarity:.3f}")
+                            if best_match:
+                                print(f"  → best_match 갱신: {best_match}")
                 
+                print(f"최종 best_match: {best_match}, max_similarity: {max_similarity:.3f}")
+
                 if best_match:
+                    print(f"✅ if best_match 조건문 진입")
                     # DB의 기존 인물과 매칭된 경우
                     print(f"✅ 클러스터 {cluster_id} → DB의 {best_match}와 매칭 (유사도: {max_similarity:.3f})")
                     if best_match not in final_results[url]:
@@ -307,6 +315,7 @@ class CompanionTagger:
                     face_idx[url] += 1
                     db_updated = True
                 else:
+                    print(f"❌ best_match가 None이어서 새 인물 추가")
                     # 새로운 인물로 추가
                     next_id = max([int(pid.split('_')[1]) for pid in database.keys()]) + 1
                     new_person_id = f"person_{next_id}"
