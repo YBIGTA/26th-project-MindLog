@@ -24,6 +24,17 @@ struct DiaryResponse: Codable {
     let created_at: String
 }
 
+struct EmotionRatioResponse: Codable {
+    let 기쁨: Double
+    let 신뢰: Double
+    let 긴장: Double
+    let 놀람: Double
+    let 슬픔: Double
+    let 혐오: Double
+    let 격노: Double
+    let 열망: Double
+}
+
 class DiaryService {
     static let shared = DiaryService()
     let baseURL = "http://192.168.0.22:8000"
@@ -228,5 +239,41 @@ class DiaryService {
             print("- Error:", error.localizedDescription)
             throw error
         }
+    }
+    
+    func getFeelingRatio(year: Int) async throws -> EmotionRatioResponse {
+        print("📍 DiaryService - getFeelingRatio 함수 시작")
+        
+        guard let url = URL(string: "\(baseURL)/feeling?year=\(year)") else {
+            print("❌ 잘못된 URL")
+            throw URLError(.badURL)
+        }
+        print("✅ URL 생성됨:", url.absoluteString)
+        
+        var request = URLRequest(url: url)
+        
+        // JWT 토큰을 Authorization 헤더에 추가
+        if let token = UserDefaults.standard.string(forKey: "jwtToken") {
+            print("✅ JWT 토큰 확인:", token)
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            print("❌ JWT 토큰 없음")
+            throw URLError(.userAuthenticationRequired)
+        }
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        
+        print("✅ 서버로부터 응답 받음")
+        print("- Status code:", httpResponse.statusCode)
+        
+        let decoder = JSONDecoder()
+        let emotionRatio = try decoder.decode(EmotionRatioResponse.self, from: data)
+        print("✅ 응답 디코딩 완료")
+        
+        return emotionRatio
     }
 } 

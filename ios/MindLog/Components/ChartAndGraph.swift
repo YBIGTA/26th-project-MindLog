@@ -39,36 +39,97 @@ struct PieChart: View {
 struct PieChartContainer: View {
     let title: String
     let data: [String: Int]
+    @State private var selectedYear: Int
+    @State private var showYearPicker = false
+    let onYearChange: (Int) -> Void  // 연도 변경 시 호출될 콜백
+    
+    init(title: String, data: [String: Int], onYearChange: @escaping (Int) -> Void) {
+        self.title = title
+        self.data = data
+        self.onYearChange = onYearChange
+        // 현재 연도를 기본값으로 설정
+        _selectedYear = State(initialValue: Calendar.current.component(.year, from: Date()))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 48) {
             // 📌 타이틀 바
             HStack {
                 Text(title)
-                    .font(.system(size: 13, weight: .medium, design: .default)) // ✅ SF Pro Display Medium 13pt
-                    .foregroundColor(Color(hex: "D2D2D2")) // ✅ #D2D2D2 색상 적용
+                    .font(.system(size: 13, weight: .medium, design: .default))
+                    .foregroundColor(Color(hex: "D2D2D2"))
                     .padding(.leading, 16)
                     .padding(.top, 12)
                 Spacer()
-                Text("Last 365 Days")
-                    .font(.system(size: 13, weight: .medium, design: .default))
-                    .foregroundColor(Color(hex: "007AFF"))
-                    .padding(.trailing, 16)
-                    .padding(.top, 12)
+                
+                Button(action: {
+                    showYearPicker = true
+                }) {
+                    Text(String(selectedYear))
+                        .font(.system(size: 13, weight: .medium, design: .default))
+                        .foregroundColor(Color(hex: "007AFF"))
+                }
+                .padding(.trailing, 16)
+                .padding(.top, 12)
+                .sheet(isPresented: $showYearPicker) {
+                    YearPickerView(
+                        selectedYear: $selectedYear,
+                        showPicker: $showYearPicker,
+                        onYearSelected: { year in
+                            onYearChange(year)
+                        }
+                    )
+                    .presentationDetents([.fraction(0.3)])  // 화면 높이의 1/3로 설정
+                }
             }
 
             // 📌 파이 차트
             PieChart(data: data)
-                .frame(height: 240) // ✅ 차트 높이 조정
-                .padding(.bottom, 12) // ✅ 차트와 하단 간격 추가
+                .frame(height: 240)
+                .padding(.bottom, 12)
         }
-        .frame(maxWidth: .infinity) // ✅ 높이 강제 조정
+        .frame(maxWidth: .infinity)
         .frame(height: 360)
         .background(
-            Color.black.opacity(0.75) // ✅ 진회색 + 투명도 75%
-                .cornerRadius(12) // ✅ 둥근 모서리 추가
+            Color.black.opacity(0.75)
+                .cornerRadius(12)
         )
-        .padding(.horizontal, 16) // ✅ 좌우 여백 추가
+        .padding(.horizontal, 16)
+    }
+}
+
+// 연도 선택을 위한 Picker View
+struct YearPickerView: View {
+    @Binding var selectedYear: Int
+    @Binding var showPicker: Bool
+    let onYearSelected: (Int) -> Void
+    
+    private let years: [Int] = {
+        let currentYear = Calendar.current.component(.year, from: Date())
+        return Array((currentYear-5)...currentYear).reversed()
+    }()
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                Picker("Year", selection: $selectedYear) {
+                    ForEach(years, id: \.self) { year in
+                        Text(String(year)).tag(year)
+                    }
+                }
+                .pickerStyle(.wheel)
+            }
+            .navigationBarItems(
+                leading: Button("Cancel") {
+                    showPicker = false
+                },
+                trailing: Button("Done") {
+                    onYearSelected(selectedYear)
+                    showPicker = false
+                }
+            )
+        }
+        .preferredColorScheme(.dark)
     }
 }
 
@@ -80,7 +141,8 @@ struct PieChartContainer_Previews: PreviewProvider {
             data: [
                 "Joy": 10, "Trust": 8, "Fear": 5, "Surprise": 7,
                 "Sadness": 6, "Disgust": 4, "Anger": 9, "Anticipation": 8
-            ]
+            ],
+            onYearChange: { _ in }
         )
         .preferredColorScheme(.dark)
         .previewLayout(.sizeThatFits)
@@ -152,36 +214,65 @@ struct BarChartContainer: View {
     let title: String
     let category: String
     let data: [Int]
+    @State private var selectedYear: Int
+    @State private var showYearPicker = false
+    let onYearChange: (Int) -> Void
+
+    init(title: String, category: String, data: [Int], selectedYear: Int, onYearChange: @escaping (Int) -> Void) {
+        self.title = title
+        self.category = category
+        self.data = data
+        _selectedYear = State(initialValue: selectedYear)
+        self.onYearChange = onYearChange
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 48) {
-            // 📌 타이틀 바
             HStack {
                 Text(title)
-                    .font(.system(size: 13, weight: .medium, design: .default)) // ✅ SF Pro Display Medium 13pt
-                    .foregroundColor(Color(hex: "D2D2D2")) // ✅ #D2D2D2 색상 적용
+                    .font(.system(size: 13, weight: .medium, design: .default))
+                    .foregroundColor(Color(hex: "D2D2D2"))
                     .padding(.leading, 16)
                     .padding(.top, 12)
                 Spacer()
-                Text("Last 365 Days")
-                    .font(.system(size: 13, weight: .medium, design: .default))
-                    .foregroundColor(Color(hex: "007AFF")) // ✅ 파란색 강조
-                    .padding(.trailing, 16)
-                    .padding(.top, 12)
+                Button(action: {
+                    showYearPicker = true
+                }) {
+                    Text(String(selectedYear))
+                        .font(.system(size: 13, weight: .medium, design: .default))
+                        .foregroundColor(Color(hex: "007AFF"))
+                }
+                .padding(.trailing, 16)
+                .padding(.top, 12)
+                .sheet(isPresented: $showYearPicker) {
+                    YearPickerView(
+                        selectedYear: $selectedYear,
+                        showPicker: $showYearPicker,
+                        onYearSelected: { year in
+                            onYearChange(year)
+                        }
+                    )
+                    .presentationDetents([.fraction(0.3)])
+                }
             }
 
-            // 📌 바 차트
-            BarChartView(category: category, data: data)
-                .frame(height: 240) // ✅ 차트 높이 조정
-                .padding(.bottom, 12) // ✅ 차트와 하단 간격 추가
+            if data.isEmpty || data.allSatisfy({ $0 == 0 }) {
+                Text("해당 연도의 기록이 없습니다")
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                BarChartView(category: category, data: data)
+                    .frame(height: 240)
+                    .padding(.bottom, 12)
+            }
         }
-        .frame(maxWidth: .infinity) // ✅ 높이 강제 조정
+        .frame(maxWidth: .infinity)
         .frame(height: 360)
         .background(
-            Color.black.opacity(0.75) // ✅ 진회색 + 투명도 75%
-                .cornerRadius(12) // ✅ 둥근 모서리 추가
+            Color.black.opacity(0.75)
+                .cornerRadius(12)
         )
-        .padding(.horizontal, 16) // ✅ 좌우 여백 추가
+        .padding(.horizontal, 16)
     }
 }
 
@@ -191,7 +282,9 @@ struct BarChartContainer_Previews: PreviewProvider {
         BarChartContainer(
             title: "Monthly Log Trends",
             category: "Joy",
-            data: [2, 1, 3, 4, 2, 5, 3, 6, 7, 5, 3, 4]
+            data: [2, 1, 3, 4, 2, 5, 3, 6, 7, 5, 3, 4],
+            selectedYear: Calendar.current.component(.year, from: Date()),
+            onYearChange: { _ in }
         )
         .preferredColorScheme(.dark)
         .previewLayout(.sizeThatFits)

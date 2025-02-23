@@ -73,6 +73,7 @@ struct ArchiveRecentLogView: View {
             .commonBackground()
             .sheet(isPresented: $showDatePicker) {
                 MonthYearPickerView(selectedDate: $selectedDate, showDatePicker: $showDatePicker)
+                    .presentationDetents([.fraction(0.3)])  // 화면 높이의 1/3로 설정
             }
         }
         .task {

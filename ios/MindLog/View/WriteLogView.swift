@@ -124,6 +124,7 @@ struct WriteLogView: View {
                         Text("오늘 하루를 담고 있는 중입니다\n잠시만 기다려주세요")
                             .font(.headline)
                             .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
                     }
                 }
             }
