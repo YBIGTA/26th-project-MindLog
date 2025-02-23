@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management</title>
+    <style>
+        /* 전체 페이지의 스타일 설정 */
+        body {
+            font-family: 'Roboto', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* 컨테이너 스타일 */
+        .container {
+            max-width: 400px;
+            margin: 20px;
+            background: #fff;
+            color: #333;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #6a11cb;
+        }
+
+        h2 {
+            font-size: 20px;
+            margin-bottom: 15px;
+            color: #2575fc;
+        }
+
+        /* 로고 스타일 */
+        .logo {
+            width: 100px;
+            height: auto;
+            margin: 20px auto;
+        }
+
+        /* 폼 스타일 */
+        form {
+            margin: 20px 0;
+        }
+
+        input {
+            padding: 10px;
+            margin: 10px 0;
+            width: calc(100% - 20px);
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+
+        /* 버튼 스타일 */
+        button {
+            padding: 12px 20px;
+            margin: 10px 0;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: #fff;
+            transition: background 0.3s, transform 0.2s;
+        }
+
+        button:hover {
+            background: linear-gradient(135deg, #2575fc 0%, #6a11cb 100%);
+            transform: scale(1.05);
+        }
+
+        /* 섹션 스타일 */
+        .section {
+            margin-bottom: 30px;
+        }
+
+        /* 숨김 클래스 */
+        .hidden {
+            display: none;
+        }
+
+        /* 반응형 디자인 */
+        @media (max-width: 768px) {
+            .container {
+                width: 90%;
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container" id="login-screen">
+        <img src="https://raw.githubusercontent.com/YBIGTA/.github/master/profile/logo.png" alt="Logo" class="logo">
+        <h1>User Management</h1>
+        <div class="section" id="login-section">
+            <h2>Login</h2>
+            <form id="login-form">
+                <input type="email" id="login-email" placeholder="Email" required><br>
+                <input type="password" id="login-password" placeholder="Password" required><br>
+                <button type="button" onclick="loginUser()">Login</button>
+            </form>
+        </div>
+        <div class="section" id="register-section">
+            <h2>Register</h2>
+            <form id="register-form">
+                <input type="email" id="register-email" placeholder="Email" required><br>
+                <input type="password" id="register-password" placeholder="Password" required><br>
+                <input type="text" id="register-username" placeholder="Username" required><br>
+                <button type="button" onclick="registerUser()">Register</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="container hidden" id="logged-in-screen">
+        <img src="https://raw.githubusercontent.com/YBIGTA/.github/master/profile/logo.png" alt="Logo" class="logo">
+        <h1>Welcome, <span id="username"></span></h1>
+        <div class="section" id="update-password-section">
+            <h2>Update Password</h2>
+            <form id="update-password-form">
+                <input type="password" id="update-password" placeholder="New Password" required><br>
+                <button type="button" onclick="updatePassword()">Update Password</button>
+            </form>
+        </div>
+
+        <div class="section" id="delete-section">
+            <h2>Delete Account</h2>
+            <button type="button" onclick="deleteUser()">Delete Account</button>
+        </div>
+    </div>
+
+    <script>
+        let userEmail = null;
+
+        // 사용자 로그인 함수
+        function loginUser() {
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+
+            fetch('http://localhost:8000/api/user/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(error => { throw new Error(error.detail); });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    userEmail = email; // 로그인 성공 시 이메일 저장
+                    document.getElementById('username').textContent = data.username; // 사용자 이름 표시
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('logged-in-screen').classList.remove('hidden');
+                })
+                .catch(error => alert(`Login failed: ${error.message}`));
+        }
+
+        // 사용자 등록 함수
+        function registerUser() {
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            const username = document.getElementById('register-username').value;
+
+            fetch('http://localhost:8000/auth/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password, username })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(error => { throw new Error(error.detail); });
+                    }
+                    return response.json();
+                })
+                .then(() => alert(`Registration successful! Welcome, ${username}.`)) // 성공 메시지에 사용자 이름 표시
+                .catch(error => alert(`Registration failed: ${error.message}`));
+        }
+
+        // 비밀번호 업데이트 함수
+        function updatePassword() {
+            const newPassword = document.getElementById('update-password').value;
+
+            fetch('http://localhost:8000/api/user/update-password', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email: userEmail, new_password: newPassword })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(error => { throw new Error(error.detail); });
+                    }
+                    return response.json();
+                })
+                .then(() => alert(`Password successfully updated!`)) // 성공 메시지
+                .catch(error => alert(`Password update failed: ${error.message}`));
+        }
+
+        // 사용자 삭제 함수
+        function deleteUser() {
+            if (!userEmail) {
+                alert("No user is logged in.");
+                return;
+            }
+
+            fetch('http://localhost:8000/api/user/delete', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email: userEmail }) // 저장된 이메일 전송
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(error => { throw new Error(error.detail); });
+                    }
+                    return response.json();
+                })
+                .then(() => {
+                    alert(`User deleted successfully!`);
+                    document.getElementById('logged-in-screen').classList.add('hidden');
+                    document.getElementById('login-screen').classList.remove('hidden');
+                    userEmail = null; // 이메일 초기화
+                })
+                .catch(error => alert(`Account deletion failed: ${error.message}`));
+        }
+    </script>
+</body>
+
+</html>
