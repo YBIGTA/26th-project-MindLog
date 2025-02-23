@@ -7,7 +7,10 @@ from pydantic import BaseModel
 import re
 import requests
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ExifTags
+import piexif
+import aiohttp
+import io
 
 router = APIRouter()
 
@@ -21,15 +24,41 @@ def convert_image_url(url: str) -> str:
     return url  # ✅ 기타 URL은 그대로 반환
 
 def download_image(image_url: str):
-    """🔹 이미지 다운로드 후 PIL 객체로 변환"""
+    """🔹 이미지 다운로드 후 PIL 객체로 변환 (EXIF 데이터 유지)"""
     try:
         response = requests.get(image_url, timeout=5)
         response.raise_for_status()
-        image = Image.open(BytesIO(response.content))
-
-        # ✅ CMYK → RGB 변환 (색상 문제 방지)
-        if image.mode != "RGB":
-            image = image.convert("RGB")
+        
+        # 이미지 데이터를 BytesIO에 저장
+        image_data = BytesIO(response.content)
+        
+        # PIL Image로 열기
+        image = Image.open(image_data)
+        
+        # EXIF 데이터 디버깅
+        print(f"📸 이미지 정보: {image_url}")
+        print(f"- 이미지 모드: {image.mode}")
+        print(f"- 이미지 포맷: {image.format}")
+        print(f"- info 키: {list(image.info.keys())}")
+        
+        # EXIF 데이터 보존을 위한 처리
+        if "exif" in image.info:
+            exif_dict = piexif.load(image.info["exif"])
+            print(f"- EXIF 데이터: {list(exif_dict.keys())}")
+            
+            # GPS 데이터 상세 확인
+            if "GPS" in exif_dict:
+                print(f"- GPS 데이터: {exif_dict['GPS']}")
+            
+            # RGB로 변환이 필요한 경우
+            if image.mode != "RGB":
+                original_exif = image.info.get("exif")
+                image = image.convert("RGB")
+                image.info["exif"] = original_exif
+        else:
+            print("- EXIF 데이터 없음")
+            if image.mode != "RGB":
+                image = image.convert("RGB")
         
         return image
 
@@ -60,44 +89,86 @@ companion_tagger = CompanionTagger()
 async def generate_tags(request: TaggingRequest):
     try:
         results = []
-
-        # ✅ 이미지 URL 변환 (Google Drive → 변환, 기타 URL은 그대로 사용)
-        image_urls = [convert_image_url(url) for url in request.image_urls]
-
-        # ✅ 한 번만 이미지를 다운로드하여 장소 태깅 및 얼굴 태깅 모델에 전달
+        image_urls = []
+        converted_urls = []  # 변환된 URL 저장
         image_data_dict = {}
-        for url in image_urls:
-            image = download_image(url)
-            if image:
-                image_data_dict[url] = {
-                    "place": resize_image(image.copy(), 512, 512),  # ✅ 장소 태깅용 (작게)
-                    "face": resize_image(image.copy(), 1024, 1024)  # ✅ 얼굴 태깅용 (크게)
-                }
-            else:
-                image_data_dict[url] = None
 
-        # ✅ 태깅 수행 (변환된 URL & 다운로드된 이미지 사용!)
-        place_tags = place_tagger.predict_places({url: img["place"] for url, img in image_data_dict.items() if img})
-        location_tags = location_tagger.predict_locations(image_urls)  # ✅ 지역 태깅에 이미지 전달하지 않고 URL만 전달
-        companion_tags = companion_tagger.process_faces({url: img["face"] for url, img in image_data_dict.items() if img})
+        # 이미지 URL 처리
+        for url in request.image_urls:
+            try:
+                # Google Drive URL 변환
+                converted_url = convert_image_url(url)
+                
+                # 이미지 다운로드 및 변환
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(converted_url) as response:
+                        if response.status == 200:
+                            image_data = await response.read()
+                            image = Image.open(io.BytesIO(image_data))
+                            
+                            # 이미지를 RGB로 변환
+                            if image.mode != 'RGB':
+                                image = image.convert('RGB')
+                            
+                            # 각 태거에 맞는 이미지 크기로 복사
+                            image_data_dict[url] = {
+                                "place": image.copy().resize((512, 512)),
+                                "face": image.copy().resize((1024, 1024))
+                            }
+                            image_urls.append(url)
+                            converted_urls.append(converted_url)  # 변환된 URL 저장
+                        else:
+                            print(f"⚠️ 이미지 다운로드 실패: {url}")
+                            results.append({"image_url": url, "tags": []})
+                            continue
 
-        # ✅ 이미지별 응답 구조화
-        for original_url, converted_url in zip(request.image_urls, image_urls):
+            except Exception as e:
+                print(f"⚠️ 이미지 처리 실패: {url}, 오류: {str(e)}")
+                results.append({"image_url": url, "tags": []})
+                continue
+
+        # 이미지가 하나도 처리되지 않은 경우
+        if not image_data_dict:
+            return {"results": results}
+
+        # 태깅 수행
+        place_tags = place_tagger.predict_places({url: data["place"] for url, data in image_data_dict.items()})
+        location_tags = location_tagger.predict_locations(converted_urls)  # 변환된 URL 사용
+
+        # 인물 태그 생성
+        companion_tags = {}
+        try:
+            companion_tags = companion_tagger.process_faces({url: data["face"] for url, data in image_data_dict.items()})
+            if companion_tags is None:
+                companion_tags = {url: [] for url in image_urls}
+        except Exception as e:
+            print(f"⚠️ 인물 태깅 실패: {str(e)}")
+            companion_tags = {url: [] for url in image_urls}
+
+        # 이미지별 응답 구조화
+        for url, converted_url in zip(image_urls, converted_urls):
             tags = []
-
-            if converted_url in place_tags and "error" not in place_tags[converted_url]:
-                tags.append({"type": "장소", "tag_name": place_tags[converted_url]["place"]})
-
+            
+            # 장소 태그 추가
+            if url in place_tags and "error" not in place_tags[url]:
+                tags.append({"type": "장소", "tag_name": place_tags[url]["place"]})
+            
+            # 지역 태그 추가 (변환된 URL 사용)
             if converted_url in location_tags and "error" not in location_tags[converted_url]:
                 tags.append({"type": "지역", "tag_name": location_tags[converted_url]["region"]})
-
-            if converted_url in companion_tags and "error" not in companion_tags[converted_url]:
-                for person in companion_tags[converted_url]:  # ✅ 여러 인물 태깅
-                    tags.append({"type": "인물", "tag_name": person})
-
-            results.append({"image_url": original_url, "tags": tags})  # ✅ 원래 URL 유지
+            
+            # 인물 태그 추가
+            if companion_tags and url in companion_tags:
+                person_tags = companion_tags[url]
+                if isinstance(person_tags, list):
+                    for person_tag in person_tags:
+                        tags.append({"type": "인물", "tag_name": person_tag})
+            
+            results.append({"image_url": url, "tags": tags})
 
         return {"results": results}
-
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"🚨 서버 오류 발생: {str(e)}")
+        print(f"🚨 전역 에러 발생: {str(e)}")
+        results = [{"image_url": url, "tags": []} for url in request.image_urls]
+        return {"results": results}

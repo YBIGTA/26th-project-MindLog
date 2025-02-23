@@ -6,7 +6,14 @@ from app.utils.places import places
 
 class PlaceTagger:
     def __init__(self, model_name="ViT-B/32", threshold=0.3):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # MPS 사용 가능 여부 확인
+        if torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+            print("✅ MPS 사용 가능: Apple Silicon GPU 사용")
+        else:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            print(f"⚠️ MPS 사용 불가: {self.device} 사용")
+        
         self.model, self.preprocess = clip.load(model_name, self.device)
         self.threshold = threshold
         self.labels = list(places.keys())
