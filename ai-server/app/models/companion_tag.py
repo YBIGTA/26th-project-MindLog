@@ -258,7 +258,7 @@ class CompanionTagger:
         # 3. 기존 DB가 있는 경우, 각 클러스터와 DB 매칭
         print("✅ 기존 DB와 매칭 시도")
         final_results = {url: [] for url in image_data_dict.keys()}
-        db_updated = False
+        db_updates = {}  # DB 업데이트를 위한 임시 저장소
         
         face_idx = {}
         for url in image_data_dict.keys():
@@ -301,44 +301,44 @@ class CompanionTagger:
                     print(f"✅ 클러스터 {cluster_id} → DB의 {best_match}와 매칭 (유사도: {max_similarity:.3f})")
                     if best_match not in final_results[url]:
                         final_results[url].append(best_match)
-                    # 새 임베딩 추가
-                    database[best_match]["embeddings"].append({
+                    # 새 임베딩 임시 저장
+                    if best_match not in db_updates:
+                        db_updates[best_match] = []
+                    db_updates[best_match].append({
                         "url": url,
                         "embedding": cluster_embedding.tolist()
                     })
-                    # 얼굴 이미지 저장 (기존 이미지가 없는 경우에만)
-                    face_path = os.path.join(face_dir, f"{best_match}.jpg")
-                    if not os.path.exists(face_path) and url in face_images:
-                        face_img = face_images[url][face_idx[url]]
-                        face_img.save(face_path)
-                        print(f"✅ 얼굴 이미지 저장: {face_path}")
                     face_idx[url] += 1
-                    db_updated = True
                 else:
                     print(f"❌ best_match가 None이어서 새 인물 추가")
                     # 새로운 인물로 추가
-                    next_id = max([int(pid.split('_')[1]) for pid in database.keys()]) + 1
+                    next_id = max([int(pid.split('_')[1]) for pid in list(database.keys()) + list(db_updates.keys())]) + 1
                     new_person_id = f"person_{next_id}"
                     print(f"✅ 새로운 인물 추가: {new_person_id}")
                     
-                    database[new_person_id] = {
-                        "embeddings": [{
-                            "url": url,
-                            "embedding": cluster_embedding.tolist()
-                        }]
-                    }
                     # 새 인물의 얼굴 이미지 저장
                     if url in face_images:
                         face_path = os.path.join(face_dir, f"{new_person_id}.jpg")
                         face_img = face_images[url][face_idx[url]]
                         face_img.save(face_path)
                         print(f"✅ 얼굴 이미지 저장: {face_path}")
+
+                    if new_person_id not in db_updates:
+                        db_updates[new_person_id] = []
+                    db_updates[new_person_id].append({
+                        "url": url,
+                        "embedding": cluster_embedding.tolist()
+                    })
                     face_idx[url] += 1
                     final_results[url].append(new_person_id)
-                    db_updated = True
         
-        # DB 업데이트
-        if db_updated:
+        # 모든 매칭이 끝난 후 DB 업데이트
+        if db_updates:
+            for person_id, embeddings in db_updates.items():
+                if person_id in database:
+                    database[person_id]["embeddings"].extend(embeddings)
+                else:
+                    database[person_id] = {"embeddings": embeddings}
             self.save_database(database)
             print("✅ DB 저장 완료")
         
