@@ -10,24 +10,37 @@ router = APIRouter(
     tags=["Feeling"]
 )
 
+
 # 🟢 1. 1년 동안 가장 많이 나온 감정 조회
-
-
 @router.get("/archive/feeling")
 def get_most_common_feeling(year: int, db: Session = Depends(get_db)):
+    """특정 연도에서 가장 많이 등장한 감정 반환"""
+
+    # ✅ 특정 연도의 감정 데이터 가져오기
     feelings = db.query(Diary.emotions).filter(
         Diary.date >= f"{year}-01-01",
         Diary.date <= f"{year}-12-31",
         Diary.emotions.isnot(None)
     ).all()
 
-    emotions = [f[0] for f in feelings if f[0]]
-    if not emotions:
+    # ✅ 감정을 개별 요소로 분리하여 카운트
+    emotion_list = []
+    for f in feelings:
+        if f[0]:  # None 체크
+            emotion_list.extend(f[0].split(", "))  # ✅ 감정 리스트 분리
+
+    # ✅ 감정이 하나도 없으면 예외 처리
+    if not emotion_list:
         raise HTTPException(
             status_code=404, detail="No data found for the given year")
 
-    most_common = Counter(emotions).most_common(1)
-    return {"emotion": most_common[0][0]}
+    # ✅ 감정별 등장 횟수 카운트
+    emotion_counts = Counter(emotion_list)
+
+    # ✅ 가장 많이 등장한 감정 반환 (최대값을 가진 감정 중 하나 반환)
+    most_common_emotion = max(emotion_counts, key=emotion_counts.get)
+
+    return {"emotion": most_common_emotion}
 
 # 🟢 2. 1년 단위 8개 감정 비율 조회
 
