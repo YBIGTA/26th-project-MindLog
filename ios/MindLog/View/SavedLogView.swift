@@ -1,0 +1,257 @@
+import SwiftUI
+import Foundation
+import AVFoundation
+
+struct SavedLogView: View {
+    @Environment(\.dismiss) private var dismiss
+    let diaryResponse: DiaryResponse
+    @State private var audioPlayer: AVAudioPlayer?
+    @State private var isPlaying: Bool = false
+    let isFromWriteView: Bool
+    @Environment(\.presentationMode) private var presentationMode
+    
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 0) {
+                // 상단 헤더
+                VStack(alignment: .leading, spacing: 4) {
+                    Heading(
+                        title: formatDateToKorean(diaryResponse.date),
+                        buttonIcon: nil,
+                        menuItems: []
+                    )
+                }
+                .padding(.bottom, 30)
+                
+                // 이미지 갤러리
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(diaryResponse.image_urls, id: \.self) { urlString in
+                            AsyncImage(url: URL(string: urlString)) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 237)
+                                    .frame(height: 348)
+                                    .clipped()
+                                    .cornerRadius(10)
+                            } placeholder: {
+                                Color.gray
+                                    .frame(width: 237, height: 348)
+                                    .cornerRadius(10)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.bottom, 16)
+                
+                // 태그 컨테이너
+                VStack(spacing: 5) {
+                    // 모든 태그들을 하나의 배열로 합치기
+                    let allTags = diaryResponse.tags.map { tag -> AnyView in
+                        switch tag.type {
+                        case "장소":
+                            return AnyView(PlaceTag(placeName: tag.tag_name, size: .small))
+                        case "도시":
+                            return AnyView(LocationTag(locationName: tag.tag_name, size: .small))
+                        case "인물":
+                            return AnyView(PersonTag(personID: tag.tag_name, size: .small))
+                        default:
+                            return AnyView(TagView(text: tag.tag_name, iconName: "tag.fill", size: .small))
+                        }
+                    } + diaryResponse.emotions.map { emotion in
+                        AnyView(EmotionTag(emotion: emotion, size: .small))
+                    }
+                    
+                    // 태그들을 4개씩 그룹화
+                    let rows = stride(from: 0, to: allTags.count, by: 4).map {
+                        Array(allTags[($0)..<min($0 + 4, allTags.count)])
+                    }
+                    
+                    // 각 행을 중앙 정렬하여 표시
+                    ForEach(0..<rows.count, id: \.self) { rowIndex in
+                        HStack(spacing: 5) {
+                            ForEach(0..<rows[rowIndex].count, id: \.self) { colIndex in
+                                rows[rowIndex][colIndex]
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                }
+                .padding(.horizontal, UIScreen.main.bounds.width * 0.1)
+                
+                // 캡션 텍스트와 음악 버튼
+                if let text = diaryResponse.text, !text.isEmpty {
+                    Text(text)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, UIScreen.main.bounds.width * 0.07)
+                        .padding(.trailing, UIScreen.main.bounds.width * 0.05)
+                        .padding(.top, 20)
+                }
+                
+                MusicButton(
+                    albumArtwork: "lucy_album",
+                    artistName: "LUCY",
+                    songTitle: "아지랑이",
+                    isPlaying: isPlaying,
+                    action: togglePlayback
+                )
+                .padding(.top, 15)
+                .padding(.horizontal, UIScreen.main.bounds.width * 0.07)
+                
+                Spacer()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
+        .overlay(
+            FloatingButtonContainer(buttons: [
+                FloatingButton(
+                    icon: "house.fill",
+                    text: nil,
+                    action: {
+                        if isFromWriteView {
+                            // WriteLogView에서 온 경우
+                            if let window = UIApplication.shared.windows.first {
+                                window.rootViewController?.dismiss(animated: true)
+                            }
+                        } else {
+                            // MainView에서 온 경우
+                            presentationMode.wrappedValue.dismiss()
+                        }
+                    }
+                ),
+                FloatingButton(
+                    icon: "square.and.arrow.up",
+                    text: "Share",
+                    action: { 
+                        print("Share tapped")
+                    }
+                )
+            ])
+            .padding(.bottom, 16),
+            alignment: .bottom
+        )
+        .navigationBarHidden(true)
+        .onAppear {
+            setupAudio()
+            // 1초 후에 음악 재생
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                audioPlayer?.play()
+                isPlaying = true
+            }
+        }
+        .onDisappear {
+            audioPlayer?.stop()
+            isPlaying = false
+        }
+    }
+    
+    private func togglePlayback() {
+        if isPlaying {
+            audioPlayer?.pause()
+            isPlaying = false
+        } else {
+            audioPlayer?.play()
+            isPlaying = true
+        }
+    }
+    
+    private func setupAudio() {
+        guard let path = Bundle.main.path(forResource: "lucy", ofType: "m4a") else {
+            print("음악 파일을 찾을 수 없습니다.")
+            return
+        }
+        
+        do {
+            audioPlayer = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
+            audioPlayer?.prepareToPlay()
+        } catch {
+            print("오디오 플레이어 초기화 실패:", error)
+        }
+    }
+    
+    private func formatDateToKorean(_ dateString: String) -> String {
+        let inputFormatter = DateFormatter()
+        inputFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+        inputFormatter.locale = Locale(identifier: "ko_KR")
+        inputFormatter.timeZone = TimeZone.current
+        
+        guard let date = inputFormatter.date(from: dateString) else {
+            // 첫 번째 포맷 실패 시 다른 포맷 시도
+            inputFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+            guard let date = inputFormatter.date(from: dateString) else {
+                // 모든 파싱 시도 실패 시 현재 날짜 사용
+                return "날짜 형식 오류"
+            }
+            return formatDate(date)
+        }
+        
+        return formatDate(date)
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        let day = calendar.component(.day, from: date)
+        
+        return "\(year)년 \(month)월 \(day)일의 기록"
+    }
+    
+    private func formatDate(_ dateString: String) -> String {
+        let inputFormatter = DateFormatter()
+        inputFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+        
+        guard let date = inputFormatter.date(from: dateString) else { return dateString }
+        
+        let outputFormatter = DateFormatter()
+        outputFormatter.dateFormat = "EEE, MMM d"
+        return outputFormatter.string(from: date)
+    }
+}
+
+// MARK: - Preview
+#Preview {
+    // 미리보기용 샘플 데이터
+    let sampleTags = [
+        TagResponse(
+            id: "1",
+            type: "장소",
+            tag_name: "카페"
+        ),
+        TagResponse(
+            id: "2",
+            type: "활동",
+            tag_name: "데이트"
+        ),
+        TagResponse(
+            id: "3",
+            type: "장소",
+            tag_name: "공원"
+        ),
+        TagResponse(
+            id: "4",
+            type: "도시",
+            tag_name: "서울"
+        )
+    ]
+    
+    let sampleResponse = DiaryResponse(
+        id: "1",
+        date: "2024-02-13T12:00:00.000000",
+        image_urls: [
+            "https://picsum.photos/400/600",
+            "https://picsum.photos/400/601"
+        ],
+        emotions: ["기쁨", "설렘"],
+        text: "오늘은 정말 좋은 하루였다. 새로운 카페를 발견했고, 맛있는 커피를 마셨다. 오랜만에 여유로운 시간을 보낼 수 있어서 행복했다.",
+        tags: sampleTags,
+        created_at: "2024-02-13T12:00:00.000000"
+    )
+    
+    return SavedLogView(diaryResponse: sampleResponse, isFromWriteView: false)
+} 
+
