@@ -11,6 +11,7 @@ from app.models.diary_model import Diary, Image, Tag, ImageTag
 from app.schemas.diary_schema import DiaryResponse
 from app.routers.auth import get_current_user
 from app.core.config import s3_client, settings  # ✅ S3 클라이언트 임포트
+from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="/diary", tags=["Diary"])
 
@@ -18,27 +19,35 @@ AI_SERVER_URL = "http://192.168.0.16:8001/ai/generate-tags"  # ✅ AI 서버 URL
 
 
 def upload_image_to_s3(image: UploadFile, s3_filename: str) -> str:
-    """EXIF 정보를 유지하면서 S3에 이미지 업로드 및 URL 반환"""
+    """GPS 메타데이터 포함하여 S3 업로드"""
 
-    # ✅ 이미지 로드 (PIL)
+    # ✅ 이미지 로드
     image_data = image.file.read()
     image.file.seek(0)  # 읽기 위치 리셋
     pil_image = PILImage.open(io.BytesIO(image_data))
 
-    # ✅ piexif를 사용하여 EXIF 데이터 로드
+    # ✅ EXIF 정보 로드
     try:
         exif_dict = piexif.load(image_data)
+        gps_data = exif_dict.get("GPS", {})
+
+        if gps_data:
+            print("✅ GPS 정보 있음:", gps_data)
+        else:
+            print("❌ GPS 정보 없음")
+
         exif_bytes = piexif.dump(exif_dict)
+
     except Exception as e:
-        # EXIF 데이터가 없거나 로드에 실패하면 None 처리
+        print("❌ EXIF 데이터 없음:", e)
         exif_bytes = None
 
-    # ✅ 다시 BytesIO로 변환 (EXIF 정보 포함)
+    # ✅ EXIF 정보 유지하면서 JPEG로 변환
     buffer = io.BytesIO()
     if exif_bytes:
-        pil_image.save(buffer, format=pil_image.format, exif=exif_bytes)
+        pil_image.save(buffer, format="JPEG", exif=exif_bytes)
     else:
-        pil_image.save(buffer, format=pil_image.format)
+        pil_image.save(buffer, format="JPEG")
     buffer.seek(0)
 
     # ✅ S3 업로드
@@ -46,12 +55,7 @@ def upload_image_to_s3(image: UploadFile, s3_filename: str) -> str:
         buffer,
         settings.AWS_S3_BUCKET_NAME,
         s3_filename,
-        ExtraArgs={
-            "ContentType": image.content_type,  # MIME 타입 유지
-            "Metadata": {
-                "original_filename": image.filename,  # 문자열 그대로 사용
-            },
-        },
+        ExtraArgs={"ContentType": "image/jpeg"},  # ✅ MIME 타입 유지
     )
 
     return f"https://{settings.AWS_S3_BUCKET_NAME}.s3.amazonaws.com/{s3_filename}"
@@ -142,10 +146,27 @@ async def create_diary(
 
 
 @router.get("/", response_model=List[DiaryResponse])
-def get_diary_list(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    """전체 다이어리 목록을 최신순으로 조회"""
-    diaries = db.query(Diary).filter(
-        Diary.user_id == user.id).order_by(Diary.date.desc()).all()
+def get_diary_list(
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+):
+    """다이어리 목록 조회 (쿼리 없으면 최신 10개, 특정 연/월 지정 가능, 최대 33개)"""
+
+    query = db.query(Diary).filter(Diary.user_id == user.id)
+
+    # ✅ 특정 연/월로 필터링
+    if year:
+        query = query.filter(
+            Diary.date >= f"{year}-01-01", Diary.date <= f"{year}-12-31")
+    if month:
+        query = query.filter(
+            Diary.date >= f"{year}-{month:02d}-01", Diary.date <= f"{year}-{month:02d}-31")
+
+    # ✅ 최신순 정렬 후 최대 개수 제한 (기본 10개, 최대 33개)
+    diaries = query.order_by(Diary.date.desc()).limit(
+        33 if (year or month) else 10).all()
 
     response = []
     for diary in diaries:
@@ -210,6 +231,40 @@ def get_diary_grouped_by_person(db: Session = Depends(get_db), user=Depends(get_
             })
 
     return {"people": response}
+
+
+@router.get("/recent-activity")
+def get_recent_activity(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """최근 50일 동안의 다이어리 작성 여부 및 첫 번째 감정 반환 (오늘 포함)"""
+
+    # ✅ 현재 시간 (UTC+9, 한국 표준시)
+    korea_tz = timezone(timedelta(hours=9))
+    today = datetime.now(korea_tz).date()  # ✅ 한국 시간 기준 오늘 날짜
+
+    start_date = today - timedelta(days=49)  # ✅ 50일 전부터 조회
+
+    # ✅ DB에서 해당 기간 동안의 다이어리 데이터 가져오기 (DATE 타입 비교)
+    diaries = (
+        db.query(Diary.date, Diary.emotions)
+        .filter(Diary.user_id == user.id, Diary.date >= start_date.strftime("%Y-%m-%d"))
+        .order_by(Diary.date.desc())
+        .all()
+    )
+
+    # ✅ 날짜별 다이어리 여부 및 첫 번째 감정 매핑
+    diary_map = {diary.date.strftime(
+        "%Y-%m-%d"): (diary.emotions.split(", ")[0] if diary.emotions else None) for diary in diaries}
+
+    recent_activity = []
+    for i in range(50):  # ✅ 50일치 데이터 조회 (오늘 포함)
+        date_str = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+        recent_activity.append({
+            "date": date_str,
+            "has_diary": date_str in diary_map,
+            "emotion": diary_map.get(date_str, None)
+        })
+
+    return {"recent_activity": recent_activity}
 
 
 @router.get("/by-person/{person_name}")
