@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, diary
+from app.routers import auth, diary, feeling
 from app.database import Base, engine
+
 
 # ✅ DB 테이블 자동 생성 (개발용, Alembic을 사용할 경우 생략 가능)
 Base.metadata.create_all(bind=engine)
@@ -28,7 +29,7 @@ app.add_middleware(
 # ✅ 라우터 등록 (API 엔드포인트 설정)
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(diary.router, tags=["Diary"])
-# app.include_router(music.router, prefix="/music", tags=["Music"])
+app.include_router(feeling.router)
 
 # ✅ 기본 엔드포인트
 

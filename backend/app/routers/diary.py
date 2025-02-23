@@ -1,7 +1,10 @@
 import uuid
+import requests
+import io
+from PIL import Image as PILImage
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.database import get_db
 from app.models.diary_model import Diary, Image, Tag, ImageTag
 from app.schemas.diary_schema import DiaryResponse
@@ -10,13 +13,34 @@ from app.core.config import s3_client, settings  # ✅ S3 클라이언트 임포
 
 router = APIRouter(prefix="/diary", tags=["Diary"])
 
+AI_SERVER_URL = "http://192.168.0.16:8001/ai/generate-tags"  # ✅ AI 서버 URL
+
+
+# ✅ EXIF 정보 유지하며 S3 업로드 함수
+def upload_image_to_s3(image: UploadFile, s3_filename: str) -> str:
+    """S3에 이미지 업로드 및 URL 반환"""
+    s3_client.upload_fileobj(
+        image.file,
+        settings.AWS_S3_BUCKET_NAME,
+        s3_filename,
+        ExtraArgs={
+            "ContentType": image.content_type,  # MIME 타입 유지
+            "Metadata": {
+                # ✅ 문자열 변환
+                "original_filename": image.filename.encode('utf-8').decode('utf-8'),
+            },
+        },
+    )
+
+    return f"https://{settings.AWS_S3_BUCKET_NAME}.s3.amazonaws.com/{s3_filename}"
+
 
 @router.post("/", response_model=DiaryResponse, status_code=status.HTTP_201_CREATED)
 async def create_diary(
-    date: str = Form(...),  # ✅ Form 데이터로 받기
-    emotions: str = Form(...),  # ✅ emotions 리스트 → JSON 문자열로 전달
-    text: str = Form(...),
-    images: List[UploadFile] = File(...),  # ✅ 여러 개의 이미지 파일을 받음
+    date: str = Form(...),
+    emotions: List[str] = Form(...),
+    text: Optional[str] = Form(None),  # ✅ 선택적 필드로 변경
+    images: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
@@ -24,45 +48,52 @@ async def create_diary(
         id=uuid.uuid4(),
         user_id=user.id,
         date=date,
-        emotions=emotions,
-        text=text,
+        emotions=", ".join(emotions),
+        text=text if text else "",  # ✅ `None`을 빈 문자열로 변환하여 Pydantic 처리 가능하게 함
     )
     db.add(new_diary)
     db.flush()
 
     image_urls = []
-    tags = set()
+    uploaded_images = []
 
-    # ✅ 1️⃣ 이미지 S3 업로드
+    # ✅ 1️⃣ 이미지 S3 업로드 (EXIF 유지)
     for image in images:
         file_extension = image.filename.split(".")[-1]
         s3_filename = f"{uuid.uuid4()}.{file_extension}"
 
-        # S3 업로드
-        s3_client.upload_fileobj(
-            image.file, settings.AWS_S3_BUCKET_NAME, s3_filename)
-
-        # ✅ 업로드된 이미지 URL 생성
-        s3_url = f"https://{settings.AWS_S3_BUCKET_NAME}.s3.amazonaws.com/{s3_filename}"
+        # ✅ 수정된 EXIF 유지 S3 업로드 함수 사용
+        s3_url = upload_image_to_s3(image, s3_filename)
         image_urls.append(s3_url)
 
-        # ✅ 이미지 정보 저장
         new_image = Image(
             id=uuid.uuid4(), diary_id=new_diary.id, image_url=s3_url)
         db.add(new_image)
-        db.flush()
+        uploaded_images.append(new_image)
 
-        # ✅ 2️⃣ AI 서버 응답 하드코딩 (이미지별 태그 적용)
-        ai_tags = [
-            {"type": "장소", "tag_name": "카페"},
-            {"type": "음식", "tag_name": "커피"},
-        ] if len(image_urls) % 2 == 0 else [
-            {"type": "인물", "tag_name": "친구"},
-            {"type": "장소", "tag_name": "공원"},
-        ]
+    db.commit()
+    db.refresh(new_diary)
 
-        # ✅ 3️⃣ 태그 저장 및 `image_tag` 매핑
-        for tag_data in ai_tags:
+    # ✅ 2️⃣ AI 서버에 이미지 URL 전달하여 태그 요청
+    try:
+        ai_response = requests.post(
+            AI_SERVER_URL, json={"image_urls": image_urls})
+        ai_results = ai_response.json().get("results", [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI 서버 요청 실패: {str(e)}")
+
+    tags = set()
+
+    # ✅ 3️⃣ AI 서버 응답을 기반으로 태그 매핑
+    for result in ai_results:
+        image_url = result["image_url"]
+        image = next(
+            (img for img in uploaded_images if img.image_url == image_url), None)
+
+        if not image:
+            continue  # 해당 URL의 이미지가 DB에 없으면 스킵
+
+        for tag_data in result["tags"]:
             tag = db.query(Tag).filter(
                 Tag.tag_name == tag_data["tag_name"]).first()
             if not tag:
@@ -71,22 +102,21 @@ async def create_diary(
                 db.add(tag)
                 db.flush()
 
-            new_image_tag = ImageTag(image_id=new_image.id, tag_id=tag.id)
+            new_image_tag = ImageTag(image_id=image.id, tag_id=tag.id)
             db.add(new_image_tag)
             tags.add(tag)
 
     db.commit()
-    db.refresh(new_diary)
 
     return DiaryResponse(
         id=new_diary.id,
         date=new_diary.date,
         image_urls=image_urls,
-        emotions=emotions.split(", "),
-        text=new_diary.text,
+        emotions=emotions,
+        text=new_diary.text if new_diary.text else "",  # ✅ Pydantic 오류 방지
         tags=[{"id": tag.id, "type": tag.type, "tag_name": tag.tag_name}
               for tag in tags],
-        created_at=new_diary.created_at
+        created_at=new_diary.created_at,
     )
 
 

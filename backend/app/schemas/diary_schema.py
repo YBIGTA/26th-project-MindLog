@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 import uuid
 from datetime import datetime
 
@@ -31,7 +31,7 @@ class DiaryResponse(BaseModel):
     date: datetime  # 날짜를 datetime으로 변경
     image_urls: List[str]
     emotions: List[str]
-    text: str
+    text: Optional[str]
     tags: List[TagResponse]  # 태그 리스트 추가
     created_at: datetime  # 날짜 타입 변경
 
