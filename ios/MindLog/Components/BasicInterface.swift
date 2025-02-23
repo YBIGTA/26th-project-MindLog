@@ -241,6 +241,73 @@ private func formatMonth(from date: Date) -> String {
     return formatter.string(from: date)
 }
 
+struct DiaryTitle: View {
+    let title: String
+    let buttonIcon: String? // 선택적 버튼 아이콘 (SF Symbol)
+    let menuItems: [MenuItem] // String 배열에서 MenuItem 배열로 변경
+    
+    // 대신 이벤트 핸들러 추가
+    var onCalendarTap: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let buttonIcon = buttonIcon {
+                if buttonIcon == "calendar" {
+                    Button(action: {
+                        onCalendarTap?()
+                    }) {
+                        HStack(spacing: 10) {
+                            Text(title)
+                                .font(.system(size: 24, weight: .bold))  // 32에서 24로 축소
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+
+                            Image(systemName: buttonIcon)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14, height: 14)  // 16에서 14로 축소
+                                .foregroundColor(Color.white.opacity(0.55))
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                } else if buttonIcon == "chevron.down" {
+                    Menu {
+                        ForEach(menuItems) { item in
+                            Button(action: item.action) {
+                                Text(item.title)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Text(title)
+                                .font(.system(size: 24, weight: .bold))  // 32에서 24로 축소
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            
+                            Image(systemName: buttonIcon)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14, height: 14)  // 16에서 14로 축소
+                                .foregroundColor(Color.white.opacity(0.55))
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            } else {
+                Text(title)
+                    .font(.system(size: 24, weight: .bold))  // 32에서 24로 축소
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
 
 // ✅ 미리보기
 

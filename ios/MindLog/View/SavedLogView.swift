@@ -15,7 +15,7 @@ struct SavedLogView: View {
             VStack(spacing: 0) {
                 // 상단 헤더
                 VStack(alignment: .leading, spacing: 4) {
-                    Heading(
+                    DiaryTitle(
                         title: formatDateToKorean(diaryResponse.date),
                         buttonIcon: nil,
                         menuItems: []
@@ -42,7 +42,7 @@ struct SavedLogView: View {
                             }
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 24)
                 }
                 .padding(.bottom, 16)
                 
@@ -79,16 +79,16 @@ struct SavedLogView: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
-                .padding(.horizontal, UIScreen.main.bounds.width * 0.1)
+                .padding(.horizontal, 24)
                 
-                // 캡션 텍스트와 음악 버튼
+                // 캡션 텍스트
                 if let text = diaryResponse.text, !text.isEmpty {
                     Text(text)
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, UIScreen.main.bounds.width * 0.07)
-                        .padding(.trailing, UIScreen.main.bounds.width * 0.05)
-                        .padding(.top, 20)
+                        .padding(.horizontal, 24)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 30)
                 }
                 
                 MusicButton(
@@ -98,12 +98,13 @@ struct SavedLogView: View {
                     isPlaying: isPlaying,
                     action: togglePlayback
                 )
-                .padding(.top, 15)
-                .padding(.horizontal, UIScreen.main.bounds.width * 0.07)
+                .padding(.top, 25)
+                .padding(.horizontal, 24)
                 
                 Spacer()
             }
         }
+        .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
         .overlay(
@@ -198,7 +199,7 @@ struct SavedLogView: View {
         let month = calendar.component(.month, from: date)
         let day = calendar.component(.day, from: date)
         
-        return "\(year)년 \(month)월 \(day)일의 기록"
+        return "\(year)년 \(month)월 \(day)일의 로그"
     }
     
     private func formatDate(_ dateString: String) -> String {

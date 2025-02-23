@@ -121,7 +121,7 @@ struct WriteLogView: View {
                             .scaleEffect(1.5)
                             .tint(.white)
                         
-                        Text("AI가 당신의 기록을 분석하고 있습니다...")
+                        Text("오늘 하루를 담고 있는 중입니다\n잠시만 기다려주세요")
                             .font(.headline)
                             .foregroundColor(.white)
                     }

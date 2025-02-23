@@ -4,17 +4,16 @@ struct ArchiveRecentLogView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var diaryEntries: [DiaryResponse] = []
     @State private var isLoading = true
-    @State private var selectedDate = Date() // 선택된 날짜
-    @State private var showDatePicker = false // DatePicker 표시 여부
+    @State private var selectedDate = Date()
+    @State private var showDatePicker = false
     
     var body: some View {
         NavigationView {
             ZStack {
                 VStack(spacing: 16) {
                     // 선택된 월 표시
-                    let formattedMonth = formatMonth(from: selectedDate)
                     Heading(
-                        title: formattedMonth,
+                        title: formatMonth(from: selectedDate),
                         buttonIcon: "calendar",
                         menuItems: [],
                         onCalendarTap: {
@@ -30,22 +29,29 @@ struct ArchiveRecentLogView: View {
                     } else {
                         ScrollView {
                             VStack(spacing: 12) {
-                                ForEach(filteredDiaries, id: \.id) { diary in
-                                    NavigationLink {
-                                        LoadingView(diaryId: diary.id)
-                                    } label: {
-                                        ArchiveCardView(
-                                            backgroundImage: getFirstImage(from: diary.image_urls),
-                                            filterImage: "glassFilter",
-                                            date: formatDate(diary.date),
-                                            location: getLocationTag(diary.tags),
-                                            place: getPlaceTag(diary.tags),
-                                            people: getPeopleTags(diary.tags),
-                                            size: .small,
-                                            action: {}
-                                        )
+                                let filteredDiaries = filterDiariesForSelectedMonth()
+                                if filteredDiaries.isEmpty {
+                                    Text("이 달의 기록이 없습니다")
+                                        .foregroundColor(.gray)
+                                        .padding(.top, 40)
+                                } else {
+                                    ForEach(filteredDiaries, id: \.id) { diary in
+                                        NavigationLink {
+                                            LoadingView(diaryId: diary.id)
+                                        } label: {
+                                            ArchiveCardView(
+                                                backgroundImage: getFirstImage(from: diary.image_urls),
+                                                filterImage: "glassFilter",
+                                                date: formatDate(diary.date),
+                                                location: getLocationTag(diary.tags),
+                                                place: getPlaceTag(diary.tags),
+                                                people: getPeopleTags(diary.tags),
+                                                size: .small,
+                                                action: {}
+                                            )
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
                                     }
-                                    .buttonStyle(PlainButtonStyle())
                                 }
                             }
                             .padding(.horizontal, 16)
@@ -74,24 +80,51 @@ struct ArchiveRecentLogView: View {
         }
     }
     
-    // 선택된 년월에 해당하는 다이어리만 필터링
-    private var filteredDiaries: [DiaryResponse] {
+    // 선택된 월의 다이어리 필터링
+    private func filterDiariesForSelectedMonth() -> [DiaryResponse] {
         let calendar = Calendar.current
         let selectedYear = calendar.component(.year, from: selectedDate)
         let selectedMonth = calendar.component(.month, from: selectedDate)
         
-        return diaryEntries.filter { diary in
-            guard let diaryDate = parseISO8601Date(diary.date) else { return false }
+        print("🔍 선택된 날짜 - 년: \(selectedYear), 월: \(selectedMonth)")
+        
+        // 먼저 해당 월의 다이어리들을 필터링
+        let filteredDiaries = diaryEntries.filter { diary in
+            print("📝 다이어리 날짜 확인 - ID: \(diary.id), Date: \(diary.date)")
+            
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+            
+            guard let diaryDate = dateFormatter.date(from: diary.date) else {
+                print("❌ 날짜 파싱 실패: \(diary.date)")
+                return false
+            }
+            
             let diaryYear = calendar.component(.year, from: diaryDate)
             let diaryMonth = calendar.component(.month, from: diaryDate)
-            return diaryYear == selectedYear && diaryMonth == selectedMonth
+            
+            let matches = diaryYear == selectedYear && diaryMonth == selectedMonth
+            print("✅ 파싱 성공 - 매칭 결과: \(matches)")
+            return matches
+        }
+        
+        // created_at 기준으로 내림차순 정렬
+        return filteredDiaries.sorted { diary1, diary2 in
+            diary1.created_at > diary2.created_at
         }
     }
     
     // ISO8601 문자열을 Date로 파싱
     private func parseISO8601Date(_ dateString: String) -> Date? {
         let formatter = ISO8601DateFormatter()
-        return formatter.date(from: dateString)
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let date = formatter.date(from: dateString) {
+            return date
+        }
+        
+        print("❌ ISO8601 날짜 파싱 실패: \(dateString)")
+        return nil
     }
     
     // 선택된 월 포맷팅 (예: "2024년 3월")
@@ -117,13 +150,26 @@ struct ArchiveRecentLogView: View {
         do {
             let responses = try await DiaryService.shared.getDiaries()
             print("📍 받아온 다이어리 개수:", responses.count)
-            for (index, diary) in responses.enumerated() {
-                print("다이어리 \(index + 1) 이미지 URLs:", diary.image_urls)
-            }
+            
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [
+                .withYear,
+                .withMonth,
+                .withDay,
+                .withTime,
+                .withDashSeparatorInDate,
+                .withColonSeparatorInTime,
+                .withTimeZone,
+                .withFractionalSeconds
+            ]
             
             await MainActor.run {
                 self.diaryEntries = responses.sorted { 
-                    $0.date > $1.date 
+                    guard let date1 = formatter.date(from: $0.created_at),
+                          let date2 = formatter.date(from: $1.created_at) else {
+                        return false
+                    }
+                    return date1 > date2
                 }
                 self.isLoading = false
             }

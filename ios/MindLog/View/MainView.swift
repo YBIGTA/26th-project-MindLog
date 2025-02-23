@@ -11,6 +11,7 @@ struct MainView: View {
     @State private var showWriteLogView = false
     @State private var isLoading = false
     @State private var showArchiveView = false
+    @State private var showLogoutAlert = false
     
     var body: some View {
         NavigationView {
@@ -42,25 +43,29 @@ struct MainView: View {
                                         },
                                         MenuItem(title: "Archive", isSelected: false) {
                                             showArchiveView = true
+                                        },
+                                        MenuItem(title: "Logout", isSelected: false) {
+                                            showLogoutAlert = true
                                         }
                                     ]
                                 )
-                                .padding(.leading, UIScreen.main.bounds.width * 0.01) // 화면 너비의 1%
+                                .padding(.leading, UIScreen.main.bounds.width * 0.01)
                                 
                                 Spacer()
                                 
-                                // 로그아웃 버튼
+                                // 새로고침 버튼 추가
                                 Button(action: {
-                                    UserDefaults.standard.removeObject(forKey: "jwtToken")
-                                    authService.isAuthenticated = false
+                                    Task {
+                                        await fetchDiaryEntries()
+                                    }
                                 }) {
-                                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    Image(systemName: "arrow.clockwise")
                                         .foregroundColor(.white)
                                         .font(.system(size: 20))
                                 }
-                                .padding(.trailing, UIScreen.main.bounds.width * 0.04) // 화면 너비의 4%
+                                .padding(.trailing, UIScreen.main.bounds.width * 0.04)
                             }
-                            .padding(.top, UIScreen.main.bounds.height * 0.02) // 화면 높이의 2%
+                            .padding(.top, UIScreen.main.bounds.height * 0.02)
                             
                             Spacer()
                             
@@ -86,7 +91,7 @@ struct MainView: View {
                                             }
                                         }
                                     } else {
-                                        ForEach(diaryEntries.prefix(5)) { entry in
+                                        ForEach(diaryEntries) { entry in
                                             NavigationLink {
                                                 LoadingView(diaryId: entry.id)
                                             } label: {
@@ -96,6 +101,13 @@ struct MainView: View {
                                     }
                                 }
                                 .padding(.horizontal)
+                            }
+                            .overlay {
+                                if isLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(1.2)
+                                }
                             }
                             
                             Spacer()
@@ -180,12 +192,6 @@ struct MainView: View {
                     .offset(x: -110, y: 50)
                     .padding(.leading)
                 }
-                
-                if isLoading {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                }
             }
             .navigationBarHidden(true)
             .onAppear {
@@ -197,6 +203,14 @@ struct MainView: View {
         .fullScreenCover(isPresented: $showArchiveView) {
             ArchiveMainView()
         }
+        .alert("로그아웃", isPresented: $showLogoutAlert) {
+            Button("취소", role: .cancel) { }
+            Button("확인", role: .destructive) {
+                authService.logout()
+            }
+        } message: {
+            Text("로그아웃하시겠습니까?")
+        }
     }
     
     private func fetchDiaryEntries() async {
@@ -207,18 +221,21 @@ struct MainView: View {
             print("📍 Fetched responses:", responses)
             
             await MainActor.run {
-                self.diaryEntries = responses.prefix(5).map { response in
-                    // S3 URL을 그대로 사용
-                    let randomImageUrl = response.image_urls.isEmpty ? "" : response.image_urls.randomElement()!
-                    print("📍 Selected Image URL:", randomImageUrl)
-                    
-                    return DiaryEntry(
-                        id: response.id,
-                        date: formatDate(from: response.date),
-                        imageUrl: randomImageUrl, // baseURL을 추가하지 않고 S3 URL을 그대로 사용
-                        text: response.text ?? ""
-                    )
-                }
+                // responses를 created_at 기준으로 내림차순 정렬 후 상위 5개 선택
+                self.diaryEntries = responses
+                    .sorted { $0.created_at > $1.created_at } // created_at 기준 내림차순 정렬
+                    .prefix(5)
+                    .map { response in
+                        let randomImageUrl = response.image_urls.isEmpty ? "" : response.image_urls.randomElement()!
+                        print("📍 Selected Image URL:", randomImageUrl)
+                        
+                        return DiaryEntry(
+                            id: response.id,
+                            date: formatDate(from: response.date),
+                            imageUrl: randomImageUrl,
+                            text: response.text ?? ""
+                        )
+                    }
                 isLoading = false
             }
         } catch {
@@ -284,6 +301,12 @@ struct MainView: View {
                 selectedItems.removeAll() // 선택 초기화
             }
         }
+    }
+    
+    private func shouldShowRefreshIndicator(_ geometry: GeometryProxy) -> Bool {
+        let frame = geometry.frame(in: .global)
+        // 스크롤이 오른쪽 끝을 넘어갈 때 새로고침 표시
+        return frame.minX < -20 // 오른쪽으로 스크롤할 때 음수값이 커짐
     }
 }
 

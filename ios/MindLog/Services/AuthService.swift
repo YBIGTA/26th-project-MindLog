@@ -4,7 +4,7 @@ import SwiftUI
 
 class AuthService: ObservableObject {
     static let shared = AuthService()
-    private let baseURL = "http://192.168.0.5:8000"
+    private let baseURL = "http://192.168.0.22:8000"
     private let tokenKey = "com.mindlog.token"
     
     @Published var isAuthenticated = false

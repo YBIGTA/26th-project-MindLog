@@ -26,7 +26,7 @@ struct DiaryResponse: Codable {
 
 class DiaryService {
     static let shared = DiaryService()
-    let baseURL = "http://192.168.0.5:8000"
+    let baseURL = "http://192.168.0.22:8000"
     
     func createDiary(date: Date, images: [UIImage], emotions: [String], text: String) async throws -> DiaryResponse {
         print("📍 DiaryService - createDiary 함수 시작")

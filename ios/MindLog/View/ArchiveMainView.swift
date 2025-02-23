@@ -2,11 +2,13 @@ import SwiftUI
 
 struct ArchiveMainView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var authService: AuthService
     @State private var showRecentLogs = false
     @State private var showFeelingView = false
     @State private var showMapView = false
     @State private var showCompanionView = false
     @State private var showHighlightView = false
+    @State private var showLogoutAlert = false
     
     var body: some View {
         ZStack {
@@ -17,7 +19,10 @@ struct ArchiveMainView: View {
                         MenuItem(title: "MindLog.", isSelected: false, action: {
                             dismiss()
                         }),
-                        MenuItem(title: "Archive", isSelected: true, action: {})
+                        MenuItem(title: "Archive", isSelected: true, action: {}),
+                        MenuItem(title: "Logout", isSelected: false, action: {
+                            showLogoutAlert = true
+                        })
                     ])
                     .padding(-10) // MainView와 동일하게 화면 너비의 5%
                     
@@ -88,6 +93,14 @@ struct ArchiveMainView: View {
         }
         .fullScreenCover(isPresented: $showHighlightView) {
             StoryPopupView(isPresented: $showHighlightView)
+        }
+        .alert("로그아웃", isPresented: $showLogoutAlert) {
+            Button("취소", role: .cancel) { }
+            Button("확인", role: .destructive) {
+                authService.logout()
+            }
+        } message: {
+            Text("로그아웃하시겠습니까?")
         }
     }
 }

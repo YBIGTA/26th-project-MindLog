@@ -3,6 +3,7 @@ import SwiftUI
 // ✅ Onboarding View (회원가입 & 로그인 선택 포함)
 struct OnboardingView: View {
     @State private var currentView: OnboardingStep = .start
+    @State private var keyboardHeight: CGFloat = 0
     
     var body: some View {
         VStack {
@@ -46,11 +47,11 @@ struct OnboardingView: View {
                         .transition(AnyTransition.opacity.animation(.easeInOut(duration: 0.3)))
                     
                 case .signUp:
-                    SignUpView(currentView: $currentView)
+                    SignUpView(currentView: $currentView, keyboardHeight: $keyboardHeight)
                         .transition(AnyTransition.opacity.animation(.easeInOut(duration: 0.3)))
                     
                 case .signIn:
-                    SignInView(currentView: $currentView)
+                    SignInView(currentView: $currentView, keyboardHeight: $keyboardHeight)
                         .transition(AnyTransition.opacity.animation(.easeInOut(duration: 0.3)))
                 }
             }
@@ -116,7 +117,7 @@ struct SignUpView: View {
     @State private var showAlert = false
     @State private var showSuccess = false
     @State private var isLoading = false
-    @State private var keyboardHeight: CGFloat = 0
+    @Binding var keyboardHeight: CGFloat
     
     var body: some View {
         VStack {
@@ -158,9 +159,6 @@ struct SignUpView: View {
                     }
                 }
         }
-        .offset(y: -keyboardHeight)
-        .animation(.easeOut(duration: 0.25), value: keyboardHeight)
-        .background(Color.black.ignoresSafeArea())
         .onAppear {
             NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { notification in
                 let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect ?? .zero
@@ -238,7 +236,7 @@ struct SignInView: View {
     @State private var password = ""
     @State private var showAlert = false
     @State private var isLoading = false
-    @State private var keyboardHeight: CGFloat = 0
+    @Binding var keyboardHeight: CGFloat
     
     var body: some View {
         VStack {
@@ -280,9 +278,6 @@ struct SignInView: View {
                     }
                 }
         }
-        .offset(y: -keyboardHeight)
-        .animation(.easeOut(duration: 0.25), value: keyboardHeight)
-        .background(Color.black.ignoresSafeArea())
         .onAppear {
             NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { notification in
                 let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect ?? .zero
