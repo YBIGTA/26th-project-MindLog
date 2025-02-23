@@ -210,6 +210,18 @@ struct FeelingChartView: View {
 struct FeelingCategoryGrid: View {
     let categories: [(String, String)]
     @Binding var selectedCategory: String?
+    
+    // 감정별 색상 매핑
+    let emotionColors: [String: String] = [
+        "Joy": "#FFD700",         // 골드
+        "Trust": "#4A90E2",       // 블루
+        "Fear": "#4A4A4A",        // 다크 그레이
+        "Surprise": "#FF9F1C",    // 오렌지
+        "Sadness": "#5C85D6",     // 블루
+        "Disgust": "#6B8E23",     // 올리브 그린
+        "Anger": "#E63946",       // 레드
+        "Anticipation": "#9B59B6" // 퍼플
+    ]
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
@@ -219,7 +231,8 @@ struct FeelingCategoryGrid: View {
                     onCategorySelected: { selected in
                         selectedCategory = selected
                     },
-                    isSelected: selectedCategory == category.0
+                    isSelected: selectedCategory == category.0,
+                    backgroundColor: Color(hex: emotionColors[category.0] ?? "#333333").opacity(0.6)
                 )
             }
         }

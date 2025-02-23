@@ -9,6 +9,19 @@ struct ArchiveMainView: View {
     @State private var showCompanionView = false
     @State private var showHighlightView = false
     @State private var showLogoutAlert = false
+    @State private var dominantEmotion: String?
+    
+    // 감정별 색상 매핑
+    private let emotionColors: [String: String] = [
+        "기쁨": "#FFD700",
+        "신뢰": "#4A90E2", 
+        "긴장": "#4A4A4A",
+        "놀람": "#FF9F1C",
+        "슬픔": "#5C85D6",
+        "혐오": "#6B8E23",
+        "격노": "#E63946",
+        "열망": "#9B59B6"
+    ]
     
     var body: some View {
         ZStack {
@@ -41,10 +54,10 @@ struct ArchiveMainView: View {
                     MenuBox(title: "Feeling",
                            imageName: "calendarImage",
                            textColor: Color(hex: "#ffffff"),
-                           backgroundColor: Color(hex: "#6b8e23")) {
+                           backgroundColor: Color(hex: emotionColors[dominantEmotion ?? ""] ?? "#6b8e23")) {
                         showFeelingView = true
                     }
-                        .zIndex(1)
+                    .zIndex(1)
                     
                     MenuBox(title: "Place", 
                            imageName: "place",
@@ -101,6 +114,22 @@ struct ArchiveMainView: View {
             }
         } message: {
             Text("로그아웃하시겠습니까?")
+        }
+        .task {
+            await fetchDominantEmotion()
+        }
+    }
+    
+    private func fetchDominantEmotion() async {
+        do {
+            let currentYear = Calendar.current.component(.year, from: Date())
+            let response = try await DiaryService.shared.getDominantEmotion(year: currentYear)
+            await MainActor.run {
+                print("Received dominant emotion:", response.emotion) // 디버깅용
+                dominantEmotion = response.emotion
+            }
+        } catch {
+            print("Error fetching dominant emotion:", error)
         }
     }
 }

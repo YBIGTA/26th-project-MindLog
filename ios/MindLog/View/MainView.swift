@@ -222,7 +222,10 @@ struct MainView: View {
             
             await MainActor.run {
                 self.diaryEntries = responses
-                    .sorted { $0.created_at > $1.created_at }
+                    .sorted { 
+                        // date 기준으로 정렬
+                        $0.date > $1.date 
+                    }
                     .prefix(5)
                     .map { response in
                         let firstImageUrl = response.image_urls.first ?? ""

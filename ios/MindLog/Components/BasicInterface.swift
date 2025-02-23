@@ -130,6 +130,19 @@ struct ExpandableCategoryButton: View {
     let category: (String, String)
     let onCategorySelected: (String?) -> Void
     let isSelected: Bool
+    let backgroundColor: Color
+
+    init(
+        category: (String, String),
+        onCategorySelected: @escaping (String?) -> Void,
+        isSelected: Bool,
+        backgroundColor: Color = Color(white: 0.2)
+    ) {
+        self.category = category
+        self.onCategorySelected = onCategorySelected
+        self.isSelected = isSelected
+        self.backgroundColor = backgroundColor
+    }
 
     var body: some View {
         Button(action: {
@@ -172,7 +185,7 @@ struct ExpandableCategoryButton: View {
             .frame(maxWidth: .infinity, minHeight: 62)
             .background(
                 RoundedRectangle(cornerRadius: 20)
-                    .fill(isSelected ? Color.gray : Color(white: 0.2))
+                    .fill(isSelected ? Color.gray : backgroundColor)
             )
         }
         .buttonStyle(PlainButtonStyle())

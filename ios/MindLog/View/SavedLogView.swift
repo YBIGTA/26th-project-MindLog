@@ -129,7 +129,7 @@ struct SavedLogView: View {
         .overlay(
             FloatingButtonContainer(buttons: [
                 FloatingButton(
-                    icon: "house.fill",
+                    icon: "arrow.left",
                     text: nil,
                     action: {
                         if isFromWriteView {

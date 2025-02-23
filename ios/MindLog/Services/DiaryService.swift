@@ -35,6 +35,10 @@ struct EmotionRatioResponse: Codable {
     let 열망: Double
 }
 
+struct DominantEmotionResponse: Codable {
+    let emotion: String  // 서버에서 오는 그대로의 키 이름 사용
+}
+
 class DiaryService {
     static let shared = DiaryService()
     let baseURL = "http://192.168.0.22:8000"
@@ -275,5 +279,29 @@ class DiaryService {
         print("✅ 응답 디코딩 완료")
         
         return emotionRatio
+    }
+    
+    func getDominantEmotion(year: Int) async throws -> DominantEmotionResponse {
+        guard let url = URL(string: "\(baseURL)/archive/feeling?year=\(year)") else {
+            throw URLError(.badURL)
+        }
+        
+        var request = URLRequest(url: url)
+        
+        if let token = UserDefaults.standard.string(forKey: "jwtToken") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            throw URLError(.userAuthenticationRequired)
+        }
+        
+        let (data, _) = try await URLSession.shared.data(for: request)
+        
+        // 서버 응답 출력
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("서버 응답 JSON:", jsonString)
+        }
+        
+        let response = try JSONDecoder().decode(DominantEmotionResponse.self, from: data)
+        return response
     }
 } 

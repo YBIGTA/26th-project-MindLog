@@ -109,9 +109,9 @@ struct ArchiveRecentLogView: View {
             return matches
         }
         
-        // created_at 기준으로 내림차순 정렬
+        // date 기준으로 내림차순 정렬
         return filteredDiaries.sorted { diary1, diary2 in
-            diary1.created_at > diary2.created_at
+            diary1.date > diary2.date
         }
     }
     
@@ -165,11 +165,7 @@ struct ArchiveRecentLogView: View {
             
             await MainActor.run {
                 self.diaryEntries = responses.sorted { 
-                    guard let date1 = formatter.date(from: $0.created_at),
-                          let date2 = formatter.date(from: $1.created_at) else {
-                        return false
-                    }
-                    return date1 > date2
+                    $0.date > $1.date  // created_at 대신 date로 정렬
                 }
                 self.isLoading = false
             }
