@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
+from typing import Dict
 from collections import Counter
 from app.database import get_db
 from app.models.diary_model import Diary
@@ -31,29 +32,39 @@ def get_most_common_feeling(year: int, db: Session = Depends(get_db)):
 # 🟢 2. 1년 단위 8개 감정 비율 조회
 
 
-@router.get("/feeling")
+# ✅ 감정 기본 리스트 (모든 감정을 포함)
+ALL_EMOTIONS = ["기쁨", "신뢰", "긴장", "놀람", "슬픔", "혐오", "격노", "열망"]
+
+
+@router.get("/feeling", response_model=Dict[str, int])
 def get_feeling_distribution(year: int, db: Session = Depends(get_db)):
+    """ 특정 연도의 감정별 등장 횟수를 반환 (누락된 감정은 0으로 설정) """
+
+    # 해당 연도의 다이어리에서 감정 데이터 가져오기
     feelings = db.query(Diary.emotions).filter(
         Diary.date >= f"{year}-01-01",
         Diary.date <= f"{year}-12-31",
         Diary.emotions.isnot(None)
     ).all()
 
-    emotions = [f[0] for f in feelings if f[0]]
-    if not emotions:
-        raise HTTPException(
-            status_code=404, detail="No data found for the given year")
+    # 감정을 개별 요소로 분리하여 카운트
+    emotion_list = []
+    for f in feelings:
+        if f[0]:  # None 체크
+            emotion_list.extend(f[0].split(", "))  # ✅ 감정 리스트 분리
 
-    total = len(emotions)
-    emotion_counts = Counter(emotions)
+    # 감정이 하나도 없으면 예외 처리
+    if not emotion_list:
+        return {emotion: 0 for emotion in ALL_EMOTIONS}  # ✅ 모든 감정을 0으로 설정하여 반환
 
-    # 8개 감정 비율 계산 (퍼센트)
-    emotions_list = ["기쁨", "신뢰", "긴장", "놀람",
-                     "슬픔", "혐오", "격노", "열망"]
-    emotion_percentages = {
-        e: round((emotion_counts.get(e, 0) / total) * 100, 2) for e in emotions_list}
+    # 감정별 개수 카운트
+    emotion_counts = Counter(emotion_list)
 
-    return emotion_percentages
+    # ✅ 모든 감정을 포함하는 결과 반환 (없으면 기본값 0)
+    result = {emotion: emotion_counts.get(
+        emotion, 0) for emotion in ALL_EMOTIONS}
+
+    return result
 
 # 🟢 3. 특정 감정의 월별 출현 횟수 조회
 
