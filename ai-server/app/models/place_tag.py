@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class PlaceTagger:
-    def __init__(self, model_name="ViT-L/14", threshold=0.3):
+    def __init__(self, model_name="ViT-L/14", threshold=0.4):
         try:
             logger.info(f"🔧 PlaceTagger 초기화 시작 (model: {model_name}, threshold: {threshold})")
             self.model_name = model_name
