@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from uuid import UUID  # ✅ UUID 타입 추가
 
 
 class UserCreate(BaseModel):
@@ -25,7 +26,7 @@ class Token(BaseModel):
 
 
 class UserResponse(BaseModel):
-    user_id: int
+    user_id: UUID  # ✅ 여기서 int → UUID 변경
     email: str
     username: str
     created_at: datetime

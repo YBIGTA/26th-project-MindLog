@@ -1,17 +1,48 @@
 version: "3.9"
 
 services:
-  ai-server:
-    build: ./ai-server
-    container_name: fastapi-ai-server
+  backend:
+    build: ./backend  # ✅ backend 폴더에서 Dockerfile 빌드
+    container_name: fastapi-backend
     ports:
-      - "8001:8001" 
+      - "8000:8000"
+    depends_on:
+      - db
     environment:
-      - CUDA_VISIBLE_DEVICES=-1  # ✅ TensorFlow GPU 비활성화 (CPU에서 실행)
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=mindlog
+      - POSTGRES_PASSWORD=securepassword
+      - POSTGRES_DB=mindlog_db
+      - FASTAPI_HOST=0.0.0.0  # ✅ 환경 변수로 FastAPI 외부 접속 허용
+      # - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      # - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      # - AWS_REGION=${AWS_REGION}
+      # - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
     volumes:
-      - ./ai-server:/app
-      - deepface_cache:/root/.deepface/weights  # ✅ DeepFace 캐시 유지
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001  # ✅ 모든 네트워크에서 접근 가능하도록 수정
+      - ./backend:/app  # ✅ backend 전체를 /app으로 마운트
+    networks:
+      - mindlog-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000  # ✅ FastAPI 외부 접근 가능하도록 수정
+
+  db:
+    image: postgres:13
+    container_name: postgres-db
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: mindlog
+      POSTGRES_PASSWORD: securepassword
+      POSTGRES_DB: mindlog_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - mindlog-network
 
 volumes:
-  deepface_cache:  # ✅ DeepFace 캐시 볼륨 추가
+  pgdata:
+
+networks:
+  mindlog-network:
+    driver: bridge

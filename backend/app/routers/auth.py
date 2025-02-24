@@ -9,7 +9,7 @@ from app.models.user_model import User
 from app.schemas.user_schema import UserCreate, Token, UserResponse
 from app.database import get_db
 
-router = APIRouter(tags=["auth"])
+router = APIRouter()
 
 # ✅ 비밀번호 해싱 설정
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
