@@ -8,12 +8,13 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
 from app.models.diary_model import Diary, Image, Tag, ImageTag
-from app.schemas.diary_schema import DiaryResponse, TagResponse, ImageResponse
+from app.schemas.diary_schema import DiaryResponse, TagResponse, ImageResponse, PlaceResponse
 from app.routers.auth import get_current_user
 from app.core.config import s3_client, settings  # ✅ S3 클라이언트 임포트
 from datetime import datetime, timedelta, timezone
 from calendar import monthrange
 from fastapi import Query
+from collections import Counter
 
 router = APIRouter(prefix="/diary", tags=["Diary"])
 
@@ -332,6 +333,60 @@ def get_recent_activity(db: Session = Depends(get_db), user=Depends(get_current_
         })
 
     return {"recent_activity": recent_activity}
+
+
+@router.get("/place", response_model=List[PlaceResponse])
+def get_places(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """장소 태그 기준으로 다이어리를 그룹화하여 반환 (최대 4개 그룹)"""
+
+    # ✅ 1. 장소 태그 추출
+    place_tags = (
+        db.query(Tag.tag_name)
+        .filter(Tag.type == "장소")
+        .join(ImageTag, Tag.id == ImageTag.tag_id)
+        .join(Image, Image.id == ImageTag.image_id)
+        .join(Diary, Diary.id == Image.diary_id)
+        .filter(Diary.user_id == user.id)
+        .all()
+    )
+
+    # ✅ 2. 등장 횟수가 많은 상위 4개 장소 태그 선택
+    tag_counts = Counter([tag[0] for tag in place_tags])
+    top_places = [tag for tag, _ in tag_counts.most_common(4)]
+
+    response = []
+    for place in top_places:
+        # ✅ 3. 해당 장소 태그가 있는 다이어리 찾기
+        diaries = (
+            db.query(Diary)
+            .join(Image, Diary.id == Image.diary_id)
+            .join(ImageTag, Image.id == ImageTag.image_id)
+            .join(Tag, Tag.id == ImageTag.tag_id)
+            .filter(Diary.user_id == user.id, Tag.tag_name == place)
+            .order_by(Diary.date.desc())
+            .all()
+        )
+
+        # ✅ 4. 다이어리 목록 생성 (위치, 썸네일 포함)
+        diary_list = []
+        for diary in diaries:
+            first_image = db.query(Image).filter(
+                Image.diary_id == diary.id).first()
+            if first_image:
+                diary_list.append({
+                    "id": diary.id,
+                    "latitude": first_image.latitude,
+                    "longitude": first_image.longitude,
+                    "thumbnail_url": first_image.image_url
+                })
+
+        response.append({
+            "category": place,
+            "diary_count": len(diary_list),
+            "diaries": diary_list
+        })
+
+    return response
 
 
 @router.get("/by-person/{person_name}")

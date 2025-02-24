@@ -41,3 +41,22 @@ class DiaryResponse(BaseModel):
 
     class Config:
         orm_mode = True  # SQLAlchemy 모델 변환 지원
+
+# ✅ 개별 장소 다이어리 응답 스키마
+class PlaceDiaryResponse(BaseModel):
+    id: uuid.UUID  # 다이어리 ID
+    thumbnail_url: str  # 썸네일 이미지 (첫 번째 이미지)
+    latitude: Optional[float]  # 위도
+    longitude: Optional[float]  # 경도
+
+    class Config:
+        orm_mode = True
+
+# ✅ 장소별 그룹 응답 스키마
+class PlaceResponse(BaseModel):
+    category: str  # 장소 태그 이름 (예: "도시", "산", "강가")
+    diary_count: int  # 해당 장소 태그를 가진 다이어리 개수
+    diaries: List[PlaceDiaryResponse]  # 다이어리 리스트 (썸네일 + 위치 포함)
+
+    class Config:
+        orm_mode = True
