@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, ForeignKey, TIMESTAMP, Text
+from sqlalchemy import Column, String, ForeignKey, TIMESTAMP, Text, Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -37,6 +37,8 @@ class Image(Base):
     diary_id = Column(UUID(as_uuid=True), ForeignKey(
         "diary.id", ondelete="CASCADE"), nullable=False)
     image_url = Column(String, nullable=False)
+    latitude = Column(Float, nullable=True)  # ✅ 위도 추가
+    longitude = Column(Float, nullable=True)  # ✅ 경도 추가
 
     # 이미지 -> 다이어리 관계
     diary = relationship("Diary", back_populates="images")
