@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import UniformTypeIdentifiers
 
 struct DiaryRequest: Encodable {
     let date: String
@@ -92,7 +93,7 @@ class DiaryService {
     static let shared = DiaryService()
     let baseURL = "http://192.168.0.5:8000"
     
-    func createDiary(date: Date, images: [UIImage], emotions: [String], text: String) async throws -> DiaryResponse {
+    func createDiary(date: Date, images: [(image: UIImage, metadata: [String: Any]?)], emotions: [String], text: String) async throws -> DiaryResponse {
         print("📍 DiaryService - createDiary 함수 시작")
         
         let dateFormatter = DateFormatter()
@@ -106,9 +107,8 @@ class DiaryService {
         
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
-        urlRequest.timeoutInterval = 600  // 60초로 증가
+        urlRequest.timeoutInterval = 600
         
-        // JWT 토큰을 Authorization 헤더에 추가
         if let token = UserDefaults.standard.string(forKey: "jwtToken") {
             print("✅ JWT 토큰 확인:", token)
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -128,7 +128,7 @@ class DiaryService {
         data.append(createFormField(named: "date", value: dateString, boundary: boundary))
         print("✅ 날짜 데이터 추가:", dateString)
         
-        // 감정 데이터 추가 (배열로 전송)
+        // 감정 데이터 추가
         for emotion in emotions {
             data.append(createFormField(named: "emotions", value: emotion, boundary: boundary))
         }
@@ -138,56 +138,76 @@ class DiaryService {
         data.append(createFormField(named: "text", value: text, boundary: boundary))
         print("✅ 텍스트 데이터 추가:", text)
         
-        // 이미지 데이터 추가
-        for (index, image) in images.enumerated() {
-            if let imageData = image.jpegData(compressionQuality: 0.8) {
+        // 이미지 데이터 추가 (수정된 부분)
+        for (index, imageInfo) in images.enumerated() {
+            print("\n📍 이미지 \(index) 처리 시작")
+            
+            if let imageData = imageInfo.image.jpegData(compressionQuality: 0.8) {
+                print("2️⃣ JPEG 데이터 생성 완료 (\(imageData.count) bytes)")
+                var finalImageData = imageData
+                
+                // 메타데이터가 있는 경우에만 처리
+                if let metadata = imageInfo.metadata {
+                    if let source = CGImageSourceCreateWithData(imageData as CFData, nil) {
+                        let mutableData = NSMutableData(data: imageData)
+                        if let destination = CGImageDestinationCreateWithData(mutableData, UTType.jpeg.identifier as CFString, 1, nil) {
+                            // 원본 메타데이터를 그대로 사용
+                            CGImageDestinationAddImageFromSource(destination, source, 0, metadata as CFDictionary)
+                            
+                            if CGImageDestinationFinalize(destination) {
+                                finalImageData = mutableData as Data
+                                print("✅ 메타데이터가 포함된 이미지 생성 완료 (\(finalImageData.count) bytes)")
+                            }
+                        }
+                    }
+                }
+                
                 data.append(createFileData(
                     fieldName: "images",
                     fileName: "image\(index).jpg",
                     mimeType: "image/jpeg",
-                    fileData: imageData,
+                    fileData: finalImageData,
                     boundary: boundary
                 ))
-                print("✅ 이미지 \(index) 추가 완료")
             }
         }
         
-        // 마지막 경계선 추가
+        // 나머지 코드는 그대로 유지
         data.append("--\(boundary)--\r\n".data(using: .utf8)!)
         
         urlRequest.httpBody = data
+        
         print("📡 요청 전송 시작")
         print("- Headers:", urlRequest.allHTTPHeaderFields ?? [:])
-        print("- Body size:", data.count, "bytes")
+        print("- Body size: \(data.count) bytes")
         
-        do {
-            let (responseData, response) = try await URLSession.shared.data(for: urlRequest)
-            print("✅ 서버로부터 응답 받음")
-            
-            if let httpResponse = response as? HTTPURLResponse {
-                print("- Status code:", httpResponse.statusCode)
-                print("- Response headers:", httpResponse.allHeaderFields)
-            }
-            
-            if let responseString = String(data: responseData, encoding: .utf8) {
-                print("- Response body:", responseString)
-            }
-            
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 201 else {
-                print("❌ 잘못된 응답 코드")
-                throw URLError(.badServerResponse)
-            }
-            
-            let diaryResponse = try JSONDecoder().decode(DiaryResponse.self, from: responseData)
-            print("✅ 응답 디코딩 완료")
-            return diaryResponse
-            
-        } catch {
-            print("❌ 네트워크 요청 실패")
-            print("- Error:", error.localizedDescription)
-            throw error
+        let (responseData, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ 잘못된 응답 형식")
+            throw URLError(.badServerResponse)
         }
+        
+        print("✅ 서버로부터 응답 받음")
+        print("- Status code:", httpResponse.statusCode)
+        print("- Response headers:", httpResponse.allHeaderFields)
+        
+        if let responseString = String(data: responseData, encoding: .utf8) {
+            print("- Response body:", responseString)
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            print("❌ 서버 에러 응답")
+            throw URLError(.badServerResponse)
+        }
+        
+        let decoder = JSONDecoder()
+        let diaryResponse = try decoder.decode(DiaryResponse.self, from: responseData)
+        
+        print("✅ 응답 디코딩 완료")
+        print("✅ 서버 응답 성공:", diaryResponse)
+        
+        return diaryResponse
     }
     
     private func createFormField(named name: String, value: String, boundary: String) -> Data {

@@ -131,7 +131,11 @@ struct WriteLogView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black)
             .navigationBarHidden(true)
-            .onChange(of: selectedItems, perform: handleSelectedItemsChange)
+            .onChange(of: selectedItems) { oldValue, newValue in
+                Task {
+                    await handleSelectedItemsChange(newValue)
+                }
+            }
         }
         .fullScreenCover(isPresented: $showSavedView) {
             if let response = savedDiaryResponse {
@@ -154,13 +158,58 @@ struct WriteLogView: View {
             
             for item in newItems {
                 if let identifier = item.itemIdentifier,
-                   !images.contains(where: { $0.id == identifier }),
-                   let data = try? await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    await MainActor.run {
-                        withAnimation {
-                            let imageData = ImageData(id: identifier, image: image, pickerItem: item)
-                            images.append(imageData)
+                   !images.contains(where: { $0.id == identifier }) {
+                    if let data = try? await item.loadTransferable(type: Data.self) {
+                        if let source = CGImageSourceCreateWithData(data as CFData, nil),
+                           let metadata = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] {
+                            
+                            // GPS 메타데이터 상세 디버깅
+                            if let gpsData = metadata[kCGImagePropertyGPSDictionary as String] as? [String: Any] {
+                                print("\n📍 GPS 메타데이터 발견 - 이미지 ID:", identifier)
+                                
+                                // 위도 정보
+                                if let latitudeRef = gpsData[kCGImagePropertyGPSLatitudeRef as String] as? String,
+                                   let latitude = gpsData[kCGImagePropertyGPSLatitude as String] as? Double {
+                                    print("- 위도: \(latitude)°\(latitudeRef)")
+                                }
+                                
+                                // 경도 정보
+                                if let longitudeRef = gpsData[kCGImagePropertyGPSLongitudeRef as String] as? String,
+                                   let longitude = gpsData[kCGImagePropertyGPSLongitude as String] as? Double {
+                                    print("- 경도: \(longitude)°\(longitudeRef)")
+                                }
+                                
+                                // 고도 정보
+                                if let altitude = gpsData[kCGImagePropertyGPSAltitude as String] as? Double {
+                                    print("- 고도: \(altitude)m")
+                                }
+                                
+                                // 시간 정보
+                                if let timestamp = gpsData[kCGImagePropertyGPSTimeStamp as String] {
+                                    print("- GPS 시간:", timestamp)
+                                }
+                                
+                                // 날짜 정보
+                                if let datestamp = gpsData[kCGImagePropertyGPSDateStamp as String] {
+                                    print("- GPS 날짜:", datestamp)
+                                }
+                            } else {
+                                print("\n⚠️ GPS 메타데이터 없음 - 이미지 ID:", identifier)
+                            }
+                            
+                            if let image = UIImage(data: data) {
+                                await MainActor.run {
+                                    withAnimation {
+                                        let imageData = ImageData(
+                                            id: identifier,
+                                            image: image,
+                                            pickerItem: item,
+                                            metadata: metadata
+                                        )
+                                        images.append(imageData)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -182,59 +231,74 @@ struct WriteLogView: View {
         isLoading = true
         
         do {
-            // 토큰 확인
-            if let token = UserDefaults.standard.string(forKey: "jwtToken") {
-                print("저장된 JWT 토큰 확인:", token)
-            } else {
-                print("⚠️ 저장된 JWT 토큰이 없습니다")
-                throw URLError(.userAuthenticationRequired)
-            }
-            
-            let validEmotions = emotions.compactMap { $0 }
-            let uiImages = images.map { $0.image }
-            
-            // 이미지가 없거나 감정이 선택되지 않은 경우 처리
-            guard !validEmotions.isEmpty, !uiImages.isEmpty else {
-                print("⚠️ 필수 데이터 누락 - 이미지: \(uiImages.isEmpty), 감정: \(validEmotions.isEmpty)")
-                await MainActor.run {
-                    isLoading = false
-                    showErrorAlert = true
-                }
+            guard !images.isEmpty else {
+                errorMessage = "이미지를 선택해주세요."
+                showError = true
+                isLoading = false
                 return
             }
             
-            print("📡 서버 요청 시작")
-            print("- 이미지 개수: \(uiImages.count)")
-            print("- 선택된 감정: \(validEmotions)")
-            print("- 작성된 캡션: \(caption)")
+            let validEmotions = emotions.compactMap { $0 }
+            guard !validEmotions.isEmpty else {
+                errorMessage = "감정을 선택해주세요."
+                showError = true
+                isLoading = false
+                return
+            }
             
+            print("\n📡 서버 전송 직전 상태")
+            print("- 전송할 이미지 개수:", images.count)
+            
+            // GPS 메타데이터 최종 확인
+            for (index, imageData) in images.enumerated() {
+                print("\n📍 이미지 #\(index + 1) GPS 데이터 확인")
+                if let metadata = imageData.metadata,
+                   let gpsData = metadata[kCGImagePropertyGPSDictionary as String] as? [String: Any] {
+                    
+                    // 위도 정보
+                    if let latitudeRef = gpsData[kCGImagePropertyGPSLatitudeRef as String] as? String,
+                       let latitude = gpsData[kCGImagePropertyGPSLatitude as String] as? Double {
+                        print("- 위도: \(latitude)°\(latitudeRef)")
+                    }
+                    
+                    // 경도 정보
+                    if let longitudeRef = gpsData[kCGImagePropertyGPSLongitudeRef as String] as? String,
+                       let longitude = gpsData[kCGImagePropertyGPSLongitude as String] as? Double {
+                        print("- 경도: \(longitude)°\(longitudeRef)")
+                    }
+                    
+                    // 고도 정보
+                    if let altitude = gpsData[kCGImagePropertyGPSAltitude as String] as? Double {
+                        print("- 고도: \(altitude)m")
+                    }
+                    
+                    print("✅ GPS 메타데이터 확인 완료")
+                } else {
+                    print("⚠️ GPS 메타데이터 없음")
+                }
+            }
+            
+            print("\n- 선택된 감정:", validEmotions)
+            print("- 작성된 캡션:", caption)
+            
+            // 서버 전송
             let response = try await DiaryService.shared.createDiary(
                 date: Date(),
-                images: uiImages,
+                images: images.map { ($0.image, $0.metadata) },
                 emotions: validEmotions,
                 text: caption
             )
             
-            print("✅ 서버 응답 성공:", response)
-            
             await MainActor.run {
-                isLoading = false
                 savedDiaryResponse = response
                 showSavedView = true
+                isLoading = false
             }
         } catch {
-            print("❌ 일기 저장 오류 발생")
-            if let urlError = error as? URLError {
-                print("- URL 에러 코드:", urlError.code)
-                print("- 에러 설명:", urlError.localizedDescription)
-            } else {
-                print("- 에러 타입:", type(of: error))
-                print("- 에러 설명:", error.localizedDescription)
-            }
-            
             await MainActor.run {
-                isLoading = false
+                errorMessage = error.localizedDescription
                 showErrorAlert = true
+                isLoading = false
             }
         }
     }
@@ -503,6 +567,7 @@ extension WriteLogView {
         let id: String
         let image: UIImage
         let pickerItem: PhotosPickerItem
+        let metadata: [String: Any]?
         
         static func == (lhs: ImageData, rhs: ImageData) -> Bool {
             return lhs.id == rhs.id
