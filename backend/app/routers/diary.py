@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
 from app.models.diary_model import Diary, Image, Tag, ImageTag
-from app.schemas.diary_schema import DiaryResponse
+from app.schemas.diary_schema import DiaryResponse, TagResponse, ImageResponse
 from app.routers.auth import get_current_user
 from app.core.config import s3_client, settings  # ✅ S3 클라이언트 임포트
 from datetime import datetime, timedelta, timezone
@@ -20,28 +20,61 @@ router = APIRouter(prefix="/diary", tags=["Diary"])
 AI_SERVER_URL = "http://192.168.0.16:8001/ai/generate-tags"  # ✅ AI 서버 URL
 
 
-def upload_image_to_s3(image: UploadFile, s3_filename: str) -> str:
-    """GPS 메타데이터 포함하여 S3 업로드"""
+def extract_gps_from_exif(image_data):
+    """EXIF 메타데이터에서 GPS 정보 추출"""
+    try:
+        exif_dict = piexif.load(image_data)
+        gps_data = exif_dict.get("GPS", {})
+
+        if not gps_data or 2 not in gps_data or 4 not in gps_data:
+            return None, None
+
+        # ✅ 위도 데이터 추출
+        lat_values = gps_data[2]  # (도, 분, 초)
+        lat_ref = gps_data.get(1, b'N').decode()  # N(북위) 또는 S(남위)
+
+        # ✅ 경도 데이터 추출
+        lon_values = gps_data[4]  # (도, 분, 초)
+        lon_ref = gps_data.get(3, b'E').decode()  # E(동경) 또는 W(서경)
+
+        # ✅ 위도 및 경도 변환
+        def convert_to_degrees(values):
+            return values[0][0] / values[0][1] + \
+                values[1][0] / (values[1][1] * 60) + \
+                values[2][0] / (values[2][1] * 3600)
+
+        latitude = convert_to_degrees(lat_values)
+        longitude = convert_to_degrees(lon_values)
+
+        # ✅ 남반구(S) 또는 서경(W)인 경우 음수 처리
+        if lat_ref == 'S':
+            latitude = -latitude
+        if lon_ref == 'W':
+            longitude = -longitude
+
+        return latitude, longitude
+
+    except Exception as e:
+        print(f"❌ GPS 데이터 추출 실패: {e}")
+        return None, None
+
+
+def upload_image_to_s3(image: UploadFile, s3_filename: str):
+    """GPS 메타데이터 포함하여 S3 업로드 및 GPS 정보 반환"""
 
     # ✅ 이미지 로드
     image_data = image.file.read()
     image.file.seek(0)  # 읽기 위치 리셋
     pil_image = PILImage.open(io.BytesIO(image_data))
 
+    # ✅ GPS 정보 추출
+    latitude, longitude = extract_gps_from_exif(image_data)
+
     # ✅ EXIF 정보 로드
     try:
         exif_dict = piexif.load(image_data)
-        gps_data = exif_dict.get("GPS", {})
-
-        if gps_data:
-            print("✅ GPS 정보 있음:", gps_data)
-        else:
-            print("❌ GPS 정보 없음")
-
         exif_bytes = piexif.dump(exif_dict)
-
-    except Exception as e:
-        print("❌ EXIF 데이터 없음:", e)
+    except Exception:
         exif_bytes = None
 
     # ✅ EXIF 정보 유지하면서 JPEG로 변환
@@ -57,10 +90,12 @@ def upload_image_to_s3(image: UploadFile, s3_filename: str) -> str:
         buffer,
         settings.AWS_S3_BUCKET_NAME,
         s3_filename,
-        ExtraArgs={"ContentType": "image/jpeg"},  # ✅ MIME 타입 유지
+        ExtraArgs={"ContentType": "image/jpeg"},
     )
 
-    return f"https://{settings.AWS_S3_BUCKET_NAME}.s3.amazonaws.com/{s3_filename}"
+    return f"https://{settings.AWS_S3_BUCKET_NAME}.s3.amazonaws.com/{s3_filename}", latitude, longitude
+
+    """다이어리 생성 API - 이미지의 GPS 정보 저장"""
 
 
 @router.post("/", response_model=DiaryResponse, status_code=status.HTTP_201_CREATED)
@@ -72,6 +107,7 @@ async def create_diary(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+
     new_diary = Diary(
         id=uuid.uuid4(),
         user_id=user.id,
@@ -82,19 +118,23 @@ async def create_diary(
     db.add(new_diary)
     db.flush()
 
-    image_urls = []
     uploaded_images = []
 
-    # ✅ 이미지 S3 업로드 (EXIF 유지)
+    # ✅ 이미지 S3 업로드 (EXIF 유지 & GPS 저장)
     for image in images:
         file_extension = image.filename.split(".")[-1]
         s3_filename = f"{uuid.uuid4()}.{file_extension}"
 
-        s3_url = upload_image_to_s3(image, s3_filename)
-        image_urls.append(s3_url)
+        s3_url, latitude, longitude = upload_image_to_s3(image, s3_filename)
 
+        # ✅ Image 테이블에 GPS 정보 함께 저장
         new_image = Image(
-            id=uuid.uuid4(), diary_id=new_diary.id, image_url=s3_url)
+            id=uuid.uuid4(),
+            diary_id=new_diary.id,
+            image_url=s3_url,
+            latitude=latitude,
+            longitude=longitude,
+        )
         db.add(new_image)
         uploaded_images.append(new_image)
 
@@ -103,8 +143,8 @@ async def create_diary(
 
     # ✅ AI 서버에 이미지 URL 전달하여 태그 요청
     try:
-        ai_response = requests.post(
-            AI_SERVER_URL, json={"image_urls": image_urls})
+        ai_response = requests.post(AI_SERVER_URL, json={"image_urls": [
+                                    img.image_url for img in uploaded_images]})
         ai_results = ai_response.json().get("results", [])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI 서버 요청 실패: {str(e)}")
@@ -138,7 +178,15 @@ async def create_diary(
     return DiaryResponse(
         id=new_diary.id,
         date=new_diary.date,
-        image_urls=image_urls,
+        images=[
+            {
+                "id": img.id,
+                "image_url": img.image_url,
+                "latitude": img.latitude,
+                "longitude": img.longitude,
+            }
+            for img in uploaded_images
+        ],
         emotions=emotions,
         text=new_diary.text,
         tags=[{"id": tag.id, "type": tag.type, "tag_name": tag.tag_name}
@@ -176,19 +224,32 @@ def get_diary_list(
 
     response = []
     for diary in diaries:
-        image_urls = [image.image_url for image in diary.images]
+        # ✅ 이미지 정보 추가 (latitude, longitude 포함)
+        images = [
+            ImageResponse(
+                id=image.id,
+                image_url=image.image_url,
+                latitude=image.latitude,
+                longitude=image.longitude
+            ) for image in diary.images
+        ]
+
+        # ✅ 태그 정보 추가
         tags = []
         for image in diary.images:
             for image_tag in db.query(ImageTag).filter(ImageTag.image_id == image.id).all():
                 tag = db.query(Tag).filter(Tag.id == image_tag.tag_id).first()
                 if tag:
-                    tags.append({"id": tag.id, "type": tag.type,
-                                "tag_name": tag.tag_name})
+                    tags.append(TagResponse(
+                        id=tag.id,
+                        type=tag.type,
+                        tag_name=tag.tag_name
+                    ))
 
         response.append(DiaryResponse(
             id=diary.id,
             date=diary.date,
-            image_urls=image_urls,
+            images=images,  # ✅ 수정된 부분
             emotions=diary.emotions.split(", ") if diary.emotions else [],
             text=diary.text,
             tags=tags,
@@ -310,21 +371,36 @@ def get_diary_by_person(person_name: str, db: Session = Depends(get_db), user=De
     return {"person_name": person_name, "diaries": response}
 
 
-@router.get("/{diary_id}")
+@router.get("/{diary_id}", response_model=DiaryResponse)
 def get_diary(diary_id: uuid.UUID, db: Session = Depends(get_db), user=Depends(get_current_user)):
     """UUID 기반 특정 다이어리 조회"""
-    diary = db.query(Diary).filter(Diary.id == diary_id,
-                                   Diary.user_id == user.id).first()
+    diary = db.query(Diary).filter(
+        Diary.id == diary_id,
+        Diary.user_id == user.id
+    ).first()
+
     if not diary:
         raise HTTPException(status_code=404, detail="다이어리를 찾을 수 없습니다.")
 
     return DiaryResponse(
         id=diary.id,
         date=diary.date,
-        image_urls=[image.image_url for image in diary.images],
+        images=[
+            ImageResponse(
+                id=image.id,
+                image_url=image.image_url,
+                latitude=image.latitude,
+                longitude=image.longitude
+            ) for image in diary.images
+        ],
         emotions=diary.emotions.split(", ") if diary.emotions else [],
         text=diary.text,
-        tags=[{"id": tag.id, "type": tag.type, "tag_name": tag.tag_name}
-              for tag in diary.tags],
+        tags=[
+            TagResponse(
+                id=tag.id,
+                type=tag.type,
+                tag_name=tag.tag_name
+            ) for tag in diary.tags
+        ],
         created_at=diary.created_at
     )
