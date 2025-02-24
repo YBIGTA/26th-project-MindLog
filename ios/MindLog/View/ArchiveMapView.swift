@@ -38,13 +38,31 @@ struct ArchiveMapView: View {
     // 필터링된 다이어리를 계산하는 함수를 별도로 분리
     private func getFilteredDiaries() -> [PlaceDiary] {
         if let selectedCategory = selectedCategory {
-            let groupDiaries = placeGroups
+            // 선택된 카테고리의 다이어리만 가져옴
+            return placeGroups
                 .first { $0.category == selectedCategory }?
-                .diaries ?? []
-            return groupDiaries.filter { $0.latitude != nil && $0.longitude != nil }
+                .diaries
+                .filter { diary in
+                    diary.latitude != nil && diary.longitude != nil
+                } ?? []
         } else {
+            // 전체 다이어리 표시 (중복 제거)
             let allDiaries = placeGroups.flatMap { $0.diaries }
-            return allDiaries.filter { $0.latitude != nil && $0.longitude != nil }
+            
+            // ID를 기준으로 중복 제거
+            var uniqueDiaries: [PlaceDiary] = []
+            var seenIds = Set<String>()
+            
+            for diary in allDiaries {
+                if !seenIds.contains(diary.id) {
+                    seenIds.insert(diary.id)
+                    if diary.latitude != nil && diary.longitude != nil {
+                        uniqueDiaries.append(diary)
+                    }
+                }
+            }
+            
+            return uniqueDiaries
         }
     }
     
