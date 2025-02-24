@@ -35,8 +35,8 @@ class PlaceTagger:
             load_time = time.time() - start_time
             logger.info(f"✅ CLIP 모델 로드 완료 (소요시간: {load_time:.2f}초)")
             
-            # 프롬프트 설정
-            self.prompt_template = "a photo of {}, outdoor scene"
+            # 프롬프트 수정 - outdoor scene 제거
+            self.prompt_template = "a photo of {}"  # 더 일반적인 프롬프트로 변경
             self.labels = [self.prompt_template.format(place) for place in places.keys()]
             logger.info(f"✅ 프롬프트 설정 완료 (레이블 수: {len(self.labels)}개)")
             
@@ -131,7 +131,7 @@ class PlaceTagger:
 
                         # 결과 저장
                         if valid_places:
-                            place_name = valid_places[0][0].replace("a photo of ", "").replace(", outdoor scene", "")
+                            place_name = valid_places[0][0].replace("a photo of ", "")
                             results[image_url] = {
                                 "place": places.get(place_name, place_name),
                                 "confidence": valid_places[0][1],
@@ -148,7 +148,7 @@ class PlaceTagger:
                                 f"   - 최종 선택 장소: {results[image_url]['place']} (신뢰도: {results[image_url]['confidence']:.4f})\n"
                                 f"   - 상위 3개 후보:\n" + 
                                 "\n".join([
-                                    f"     {i+1}. {p[0].replace('a photo of ', '').replace(', outdoor scene', '')} "
+                                    f"     {i+1}. {p[0].replace('a photo of ', '')} "  # outdoor scene 제거
                                     f"(신뢰도: {p[1]:.4f})"
                                     for i, p in enumerate(best_places[:3])
                                 ]) + f"\n"
@@ -165,7 +165,7 @@ class PlaceTagger:
                                 f"⚠️ 유효한 장소 없음: {image_url}\n" +
                                 "   - 상위 3개 후보 (임계값 {self.threshold} 미만):\n" +
                                 "\n".join([
-                                    f"     {i+1}. {p[0].replace('a photo of ', '').replace(', outdoor scene', '')} "
+                                    f"     {i+1}. {p[0].replace('a photo of ', '')} "  # outdoor scene 제거
                                     f"(신뢰도: {p[1]:.4f})"
                                     for i, p in enumerate(best_places[:3])
                                 ])
