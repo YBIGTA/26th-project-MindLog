@@ -89,6 +89,23 @@ struct PersonDiaryResponse: Codable {
     }
 }
 
+struct PlaceDiary: Codable, Identifiable {
+    let id: String
+    let thumbnail_url: String
+    let latitude: Double?
+    let longitude: Double?
+}
+
+struct PlaceGroup: Codable {
+    let category: String
+    let diary_count: Int
+    let diaries: [PlaceDiary]
+}
+
+struct PlaceGroupResponse: Codable {
+    let places: [PlaceGroup]
+}
+
 class DiaryService {
     static let shared = DiaryService()
     let baseURL = "http://192.168.0.5:8000"
@@ -584,5 +601,78 @@ class DiaryService {
         let result = try JSONDecoder().decode(PersonDiaryResponse.self, from: data)
         print("✅ 응답 디코딩 완료")
         return result
+    }
+    
+    func getDiariesByPlace() async throws -> PlaceGroupResponse {
+        print("📍 DiaryService - getDiariesByPlace 함수 시작")
+        
+        guard let url = URL(string: "\(baseURL)/diary/place") else {
+            print("❌ 잘못된 URL")
+            throw URLError(.badURL)
+        }
+        print("✅ URL 생성됨:", url.absoluteString)
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        
+        if let token = UserDefaults.standard.string(forKey: "jwtToken") {
+            print("✅ JWT 토큰:", token)
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            print("❌ JWT 토큰 없음")
+            throw URLError(.userAuthenticationRequired)
+        }
+        
+        print("📡 요청 시작")
+        print("- Headers:", request.allHTTPHeaderFields ?? [:])
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("❌ HTTP 응답이 아님")
+                throw URLError(.badServerResponse)
+            }
+            
+            print("📡 서버 응답 받음")
+            print("- Status code:", httpResponse.statusCode)
+            print("- Headers:", httpResponse.allHeaderFields)
+            
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("📝 응답 데이터:\n\(responseString)")
+            }
+            
+            print("🔍 JSON 디코딩 시작")
+            do {
+                let places = try JSONDecoder().decode([PlaceGroup].self, from: data)
+                print("✅ JSON 디코딩 성공")
+                return PlaceGroupResponse(places: places)
+            } catch {
+                print("❌ JSON 디코딩 실패")
+                print("- 에러:", error)
+                print("- 디코딩 에러 상세:", (error as? DecodingError).map { debugDecodingError($0) } ?? "알 수 없는 에러")
+                throw error
+            }
+        } catch {
+            print("❌ 네트워크 요청 실패")
+            print("- 에러:", error.localizedDescription)
+            throw error
+        }
+    }
+    
+    // 디코딩 에러 디버깅을 위한 헬퍼 함수
+    private func debugDecodingError(_ error: DecodingError) -> String {
+        switch error {
+        case .dataCorrupted(let context):
+            return "데이터 손상: \(context.debugDescription)"
+        case .keyNotFound(let key, let context):
+            return "키를 찾을 수 없음: \(key.stringValue) at path: \(context.codingPath)"
+        case .typeMismatch(let type, let context):
+            return "타입 불일치: \(type) at path: \(context.codingPath)"
+        case .valueNotFound(let type, let context):
+            return "값을 찾을 수 없음: \(type) at path: \(context.codingPath)"
+        @unknown default:
+            return "알 수 없는 디코딩 에러"
+        }
     }
 } 

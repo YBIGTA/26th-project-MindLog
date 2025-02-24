@@ -178,38 +178,3 @@ struct ArchiveCardView_Previews: PreviewProvider {
         .previewLayout(.sizeThatFits)
     }
 }
-
-import SwiftUI
-
-struct LogOnMap: View {
-    let latitude: Double
-    let longitude: Double
-    let image: String
-    let action: () -> Void // 클릭 시 실행할 동작 추가
-
-    var body: some View {
-        Button(action: action) {
-            Image(image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 64, height: 64) // ✅ 크기 명확히 지정
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.gray, lineWidth: 2) // ✅ Stroke 추가
-                )
-                .shadow(radius: 5)
-        }
-        .offset(y: -32) // ✅ 지도 마커보다 위로 이동시킴
-    }
-}
-
-// ✅ 미리보기
-struct LogOnMap_Previews: PreviewProvider {
-    static var previews: some View {
-        LogOnMap(latitude: 37.5665, longitude: 126.9780, image: "preview") {
-            print("Log tapped!")
-        }
-        .previewLayout(.sizeThatFits)
-    }
-}
