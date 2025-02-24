@@ -296,7 +296,10 @@ struct FeelingCategoryGrid: View {
                         onCategorySelected(category.0)
                     },
                     isSelected: selectedCategory == category.0,
-                    backgroundColor: Color(hex: emotionColors[category.0] ?? "#333333").opacity(0.6)
+                    backgroundColor: Color(hex: emotionColors[category.0] ?? "#333333").opacity(0.6),
+                    onBackPressed: {
+                        selectedCategory = nil  // 선택 해제
+                    }
                 )
             }
         }

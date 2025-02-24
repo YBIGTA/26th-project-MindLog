@@ -35,22 +35,24 @@ struct ArchiveMapView: View {
     @State private var selectedDiaryResponse: DiaryResponse? = nil  // DiaryEntry 대신 DiaryResponse 사용
     @State private var showDiaryDetail = false
     
-    var filteredDiaries: [PlaceDiary] {
+    // 필터링된 다이어리를 계산하는 함수를 별도로 분리
+    private func getFilteredDiaries() -> [PlaceDiary] {
         if let selectedCategory = selectedCategory {
-            return placeGroups
+            let groupDiaries = placeGroups
                 .first { $0.category == selectedCategory }?
-                .diaries
-                .filter { $0.latitude != nil && $0.longitude != nil } ?? []
+                .diaries ?? []
+            return groupDiaries.filter { $0.latitude != nil && $0.longitude != nil }
+        } else {
+            let allDiaries = placeGroups.flatMap { $0.diaries }
+            return allDiaries.filter { $0.latitude != nil && $0.longitude != nil }
         }
-        return placeGroups
-            .flatMap { $0.diaries }
-            .filter { $0.latitude != nil && $0.longitude != nil }
     }
     
     var body: some View {
         NavigationStack {
             ZStack {
-                Map(coordinateRegion: $region, annotationItems: filteredDiaries) { diary in
+                // Map 뷰에서 필터링된 다이어리 사용
+                Map(coordinateRegion: $region, annotationItems: getFilteredDiaries()) { diary in
                     MapAnnotation(coordinate: CLLocationCoordinate2D(
                         latitude: diary.latitude ?? 0,
                         longitude: diary.longitude ?? 0
@@ -73,20 +75,10 @@ struct ArchiveMapView: View {
                     
                     Spacer()
                     
-                    LazyVGrid(columns: [
-                        GridItem(.flexible(), spacing: 8),
-                        GridItem(.flexible(), spacing: 8)
-                    ], spacing: 8) {
-                        ForEach(placeGroups, id: \.category) { group in
-                            ExpandableCategoryButton(
-                                category: (group.category, "\(group.diary_count)개의 로그"),
-                                onCategorySelected: { selected in
-                                    selectedCategory = (selectedCategory == selected) ? nil : selected
-                                },
-                                isSelected: selectedCategory == group.category
-                            )
-                        }
-                    }
+                    PlaceCategoryGrid(
+                        placeGroups: placeGroups,
+                        selectedCategory: $selectedCategory
+                    )
                     .padding(.horizontal, 16)
                     .padding(.bottom, 60)
                 }
@@ -146,6 +138,33 @@ struct ArchiveMapView: View {
             await MainActor.run {
                 self.errorMessage = error.localizedDescription
                 self.showError = true
+            }
+        }
+    }
+}
+
+// 카테고리 그리드를 별도의 뷰로 분리
+struct PlaceCategoryGrid: View {
+    let placeGroups: [PlaceGroup]
+    @Binding var selectedCategory: String?
+    
+    var body: some View {
+        LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 8),
+            GridItem(.flexible(), spacing: 8)
+        ], spacing: 8) {
+            ForEach(placeGroups, id: \.category) { group in
+                ExpandableCategoryButton(
+                    category: (group.category, "\(group.diary_count)개의 로그"),
+                    onCategorySelected: { selected in
+                        selectedCategory = (selectedCategory == selected) ? nil : selected
+                    },
+                    isSelected: selectedCategory == group.category,
+                    backgroundColor: Color(white: 0.2),
+                    onBackPressed: {
+                        selectedCategory = nil
+                    }
+                )
             }
         }
     }

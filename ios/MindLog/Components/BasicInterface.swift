@@ -146,23 +146,14 @@ struct ExpandableCategoryButton: View {
     let onCategorySelected: (String) -> Void
     let isSelected: Bool
     let backgroundColor: Color
-
-    init(
-        category: (String, String),
-        onCategorySelected: @escaping (String) -> Void,
-        isSelected: Bool,
-        backgroundColor: Color = Color(white: 0.2)
-    ) {
-        self.category = category
-        self.onCategorySelected = onCategorySelected
-        self.isSelected = isSelected
-        self.backgroundColor = backgroundColor
-    }
+    let onBackPressed: () -> Void
 
     var body: some View {
         Button(action: {
             withAnimation(.easeInOut(duration: 0.2)) {
-                if !isSelected {
+                if isSelected {
+                    onBackPressed() // 선택된 상태에서 버튼을 누르면 뒤로가기
+                } else {
                     onCategorySelected(category.0)
                 }
             }
@@ -180,20 +171,11 @@ struct ExpandableCategoryButton: View {
                 Spacer()
                 
                 if isSelected {
-                    Button(action: {
-                        print("\(category.0) 상세 보기")
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.white)
-                                .frame(width: 42, height: 42)
-                            
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.black)
-                        }
-                    }
-                    .buttonStyle(PlainButtonStyle())
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                        .frame(width: 42, height: 42)
+                        .background(Circle().fill(Color.white.opacity(0.2)))
                 }
             }
             .padding(.leading, 16)
@@ -212,7 +194,13 @@ struct ExpandableCategoryButton: View {
 struct ExpandableCategoryButton_Previews: PreviewProvider {
     static var previews: some View {
         VStack(spacing: 20) {
-            ExpandableCategoryButton(category: ("도시", "5개의 로그"), onCategorySelected: { _ in }, isSelected: false)
+            ExpandableCategoryButton(
+                category: ("도시", "5개의 로그"), 
+                onCategorySelected: { _ in }, 
+                isSelected: false,
+                backgroundColor: Color(hex: "2c3e50"),
+                onBackPressed: {}
+            )
         }
         .padding()
         .foregroundColor(Color(hex: "2c3e50"))
