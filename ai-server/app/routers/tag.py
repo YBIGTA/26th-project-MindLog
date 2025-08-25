@@ -1,8 +1,11 @@
 from fastapi import APIRouter, HTTPException
+from app.models.diary_generator import DiaryGenerator
+from app.models.llm_diary_generator import LLMDiaryGenerator
+from app.models.simple_image_analyzer import SimpleImageAnalyzer
 from app.models.place_tag import PlaceTagger
-from app.models.location_tag import LocationTagger
-from app.models.companion_tag import CompanionTagger
-from typing import List, Dict
+# from app.models.location_tag import LocationTagger
+# from app.models.companion_tag import CompanionTagger
+from typing import List, Dict, Optional
 from pydantic import BaseModel
 import re
 import requests
@@ -80,95 +83,127 @@ def resize_image(image: Image.Image, max_width: int, max_height: int):
 class TaggingRequest(BaseModel):
     image_urls: List[str]
 
-# ✅ 태깅 모델 인스턴스 생성
-place_tagger = PlaceTagger()
-location_tagger = LocationTagger()
-companion_tagger = CompanionTagger()
+# ✅ 모델 인스턴스 생성
+diary_generator = DiaryGenerator()
+llm_diary_generator = LLMDiaryGenerator()
+image_analyzer = SimpleImageAnalyzer()
+try:
+    place_tagger = PlaceTagger()
+    print("✅ PlaceTagger 초기화 성공")
+except Exception as e:
+    print(f"⚠️ PlaceTagger 초기화 실패, 단순 분석기 사용: {str(e)}")
+    place_tagger = None
+# location_tagger = LocationTagger()
+# companion_tagger = CompanionTagger()
 
 @router.post("/generate-tags")
 async def generate_tags(request: TaggingRequest):
+    """
+    이미지 태깅 기능 (CLIP 기반 또는 키워드 기반 분석)
+    """
     try:
+        print(f"📸 이미지 태깅 요청: {len(request.image_urls)}개 이미지")
         results = []
-        image_urls = []
-        converted_urls = []  # 변환된 URL 저장
-        image_data_dict = {}
-
-        # 이미지 URL 처리
-        for url in request.image_urls:
+        
+        # CLIP 기반 place tagger 사용 시도
+        if place_tagger is not None:
+            print("🔬 CLIP 기반 장소 분석 사용")
             try:
-                # Google Drive URL 변환
-                converted_url = convert_image_url(url)
+                # 이미지 다운로드
+                image_data_dict = {}
+                for url in request.image_urls:
+                    converted_url = convert_image_url(url)
+                    image = download_image(converted_url)
+                    if image:
+                        image_data_dict[url] = image
                 
-                # 이미지 다운로드 및 변환
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(converted_url) as response:
-                        if response.status == 200:
-                            image_data = await response.read()
-                            image = Image.open(io.BytesIO(image_data))
-                            
-                            # 이미지를 RGB로 변환
-                            if image.mode != 'RGB':
-                                image = image.convert('RGB')
-                            
-                            # 각 태거에 맞는 이미지 크기로 복사
-                            image_data_dict[url] = {
-                                "place": image.copy().resize((512, 512)),
-                                "face": image.copy().resize((1024, 1024))
-                            }
-                            image_urls.append(url)
-                            converted_urls.append(converted_url)  # 변환된 URL 저장
-                        else:
-                            print(f"⚠️ 이미지 다운로드 실패: {url}")
-                            results.append({"image_url": url, "tags": []})
-                            continue
-
+                if image_data_dict:
+                    # CLIP 기반 장소 예측
+                    place_results = place_tagger.predict_places(image_data_dict, top_k=1)
+                    
+                    for url in request.image_urls:
+                        tags = []
+                        if url in place_results and "place" in place_results[url]:
+                            place_name = place_results[url]["place"]
+                            confidence = place_results[url].get("confidence", 0)
+                            tags.append({
+                                "type": "장소",
+                                "tag_name": place_name,
+                                "confidence": confidence
+                            })
+                            print(f"✅ CLIP 장소 분석: {place_name} (신뢰도: {confidence:.3f})")
+                        
+                        # 추가로 간단한 키워드 분석도 수행
+                        keyword_tags = image_analyzer.analyze_image_simple(url)
+                        for tag in keyword_tags:
+                            if not any(t["tag_name"] == tag["tag_name"] for t in tags):
+                                tags.append(tag)
+                        
+                        results.append({"image_url": url, "tags": tags})
+                
             except Exception as e:
-                print(f"⚠️ 이미지 처리 실패: {url}, 오류: {str(e)}")
-                results.append({"image_url": url, "tags": []})
-                continue
-
-        # 이미지가 하나도 처리되지 않은 경우
-        if not image_data_dict:
-            return {"results": results}
-
-        # 태깅 수행
-        place_tags = place_tagger.predict_places({url: data["place"] for url, data in image_data_dict.items()})
-        location_tags = location_tagger.predict_locations(converted_urls)  # 변환된 URL 사용
-
-        # 인물 태그 생성
-        companion_tags = {}
-        try:
-            companion_tags = companion_tagger.process_faces({url: data["face"] for url, data in image_data_dict.items()})
-            if companion_tags is None:
-                companion_tags = {url: [] for url in image_urls}
-        except Exception as e:
-            print(f"⚠️ 인물 태깅 실패: {str(e)}")
-            companion_tags = {url: [] for url in image_urls}
-
-        # 이미지별 응답 구조화
-        for url, converted_url in zip(image_urls, converted_urls):
-            tags = []
-            
-            # 장소 태그 추가
-            if url in place_tags and "error" not in place_tags[url]:
-                tags.append({"type": "장소", "tag_name": place_tags[url]["place"]})
-            
-            # 지역 태그 추가 (변환된 URL 사용)
-            if converted_url in location_tags and "error" not in location_tags[converted_url]:
-                tags.append({"type": "지역", "tag_name": location_tags[converted_url]["region"]})
-            
-            # 인물 태그 추가
-            if companion_tags and url in companion_tags:
-                person_tags = companion_tags[url]
-                if isinstance(person_tags, list):
-                    for person_tag in person_tags:
-                        tags.append({"type": "인물", "tag_name": person_tag})
-            
-            results.append({"image_url": url, "tags": tags})
-
+                print(f"⚠️ CLIP 분석 실패, 키워드 분석으로 대체: {str(e)}")
+                # CLIP 실패 시 키워드 기반으로 대체
+                for url in request.image_urls:
+                    tags = image_analyzer.analyze_image_simple(url)
+                    results.append({"image_url": url, "tags": tags})
+        else:
+            print("📝 키워드 기반 분석 사용")
+            # 간단한 이미지 분석 (키워드 기반)
+            for url in request.image_urls:
+                print(f"📍 처리 중인 이미지: {url}")
+                tags = image_analyzer.analyze_image_simple(url)
+                print(f"✅ 생성된 태그: {tags}")
+                results.append({"image_url": url, "tags": tags})
+        
         return {"results": results}
         
     except Exception as e:
-        print(f"🚨 전역 에러 발생: {str(e)}")
+        print(f"🚨 태깅 에러 발생: {str(e)}")
         results = [{"image_url": url, "tags": []} for url in request.image_urls]
         return {"results": results}
+
+# ✅ 일기 텍스트 생성 요청 스키마
+class DiaryGenerationRequest(BaseModel):
+    emotions: List[str]
+    tags: List[Dict[str, str]]  # [{"type": "장소", "tag_name": "카페"}, ...]
+    user_text: Optional[str] = None
+
+@router.post("/generate-diary-text")
+async def generate_diary_text(request: DiaryGenerationRequest):
+    """
+    감정과 태그 정보를 바탕으로 일기 텍스트를 자동 생성합니다.
+    """
+    try:
+        print(f"📝 일기 텍스트 생성 요청:")
+        print(f"- 감정: {request.emotions}")
+        print(f"- 태그: {request.tags}")
+        print(f"- 사용자 텍스트: {request.user_text}")
+        
+        # 사용자 텍스트에서 추가 태그 추출
+        additional_tags = []
+        if request.user_text:
+            detected_tags = image_analyzer.analyze_image_simple("", request.user_text)
+            additional_tags.extend(detected_tags)
+            print(f"🔍 사용자 텍스트에서 추출한 추가 태그: {detected_tags}")
+        
+        # 기존 태그와 추가 태그 합치기
+        all_tags = list(request.tags) + additional_tags
+        
+        # LLM을 사용한 일기 텍스트 생성
+        generated_text = llm_diary_generator.generate_diary_text(
+            emotions=request.emotions,
+            tags=all_tags,
+            user_text=request.user_text
+        )
+        
+        print(f"✅ 생성된 일기 텍스트: {generated_text}")
+        
+        return {
+            "generated_text": generated_text,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        print(f"🚨 일기 텍스트 생성 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"일기 텍스트 생성 실패: {str(e)}")

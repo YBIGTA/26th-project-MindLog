@@ -1,0 +1,29 @@
+# Python cache & env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.log
+
+# 가상환경
+venv/
+.env
+.venv/
+
+# Git
+.git
+.gitignore
+
+# 데이터/모델 대용량 파일
+*.csv
+*.tsv
+*.json
+*.h5
+*.pth
+*.zip
+*.tar
+*.gz
+
+# 기타
+node_modules/

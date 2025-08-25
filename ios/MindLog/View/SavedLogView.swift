@@ -1,12 +1,9 @@
 import SwiftUI
 import Foundation
-import AVFoundation
 
 struct SavedLogView: View {
     @Environment(\.dismiss) private var dismiss
     let diaryResponse: DiaryResponse
-    @State private var audioPlayer: AVAudioPlayer?
-    @State private var isPlaying: Bool = false
     @State private var selectedImage: String?
     @State private var showFullScreenImage = false
     let isFromWriteView: Bool
@@ -110,15 +107,7 @@ struct SavedLogView: View {
                         .padding(.top, 18)
                 }
                 
-                MusicButton(
-                    albumArtwork: "lucy_album",
-                    artistName: "LUCY",
-                    songTitle: "아지랑이",
-                    isPlaying: isPlaying,
-                    action: togglePlayback
-                )
-                .padding(.top, 18)
-                .padding(.horizontal, 24)
+                // Music recommendation removed
                 
                 Spacer()
             }
@@ -198,42 +187,6 @@ struct SavedLogView: View {
             }
         }
         .navigationBarHidden(true)
-        .onAppear {
-            setupAudio()
-            // 1초 후에 음악 재생
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                audioPlayer?.play()
-                isPlaying = true
-            }
-        }
-        .onDisappear {
-            audioPlayer?.stop()
-            isPlaying = false
-        }
-    }
-    
-    private func togglePlayback() {
-        if isPlaying {
-            audioPlayer?.pause()
-            isPlaying = false
-        } else {
-            audioPlayer?.play()
-            isPlaying = true
-        }
-    }
-    
-    private func setupAudio() {
-        guard let path = Bundle.main.path(forResource: "lucy", ofType: "m4a") else {
-            print("음악 파일을 찾을 수 없습니다.")
-            return
-        }
-        
-        do {
-            audioPlayer = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
-            audioPlayer?.prepareToPlay()
-        } catch {
-            print("오디오 플레이어 초기화 실패:", error)
-        }
     }
     
     private func formatDateToKorean(_ dateString: String) -> String {

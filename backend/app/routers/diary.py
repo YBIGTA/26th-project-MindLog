@@ -18,7 +18,7 @@ from collections import Counter
 
 router = APIRouter(prefix="/diary", tags=["Diary"])
 
-AI_SERVER_URL = "http://192.168.0.16:8001/ai/generate-tags"  # ✅ AI 서버 URL
+AI_SERVER_URL = "http://ai-server:8001/ai/generate-tags"  # ✅ AI 서버 URL
 
 
 def extract_gps_from_exif(image_data):
@@ -96,7 +96,22 @@ def upload_image_to_s3(image: UploadFile, s3_filename: str):
 
     return f"https://{settings.AWS_S3_BUCKET_NAME}.s3.amazonaws.com/{s3_filename}", latitude, longitude
 
-    """다이어리 생성 API - 이미지의 GPS 정보 저장"""
+@router.post("/upload-temp-images")
+async def upload_temp_images(
+    images: List[UploadFile] = File(...),
+    user=Depends(get_current_user)
+):
+    """임시 이미지 업로드 - AI 태깅을 위한 S3 URL 생성"""
+    uploaded_urls = []
+    
+    for image in images:
+        file_extension = image.filename.split(".")[-1]
+        s3_filename = f"temp/{uuid.uuid4()}.{file_extension}"
+        
+        s3_url, latitude, longitude = upload_image_to_s3(image, s3_filename)
+        uploaded_urls.append(s3_url)
+    
+    return {"image_urls": uploaded_urls}
 
 
 @router.post("/", response_model=DiaryResponse, status_code=status.HTTP_201_CREATED)

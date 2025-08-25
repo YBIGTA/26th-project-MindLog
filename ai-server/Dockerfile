@@ -1,30 +1,32 @@
-# 1️⃣ 베이스 이미지 설정 (Python 3.10 사용)
+# 1️⃣ Base image (Python 3.10)
 FROM python:3.10
 
-# 2️⃣ 시스템 패키지 설치 (OpenCV 실행을 위한 필수 라이브러리 추가)
+# 2️⃣ System dependencies (for OpenCV)
+RUN pip install --upgrade pip
+
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 && \
     rm -rf /var/lib/apt/lists/*
 
-# 3️⃣ TensorFlow GPU 비활성화 (CPU에서 실행)
+# 3️⃣ Disable GPU (force CPU execution)
 ENV CUDA_VISIBLE_DEVICES="-1"
 
-# 4️⃣ 작업 디렉토리 설정
+# 4️⃣ Working directory
 WORKDIR /app
 
-# 5️⃣ 환경 변수 설정 (Python 모듈 검색 경로 추가)
+# 5️⃣ Environment variables
 ENV PYTHONPATH="/app"
 
-# 6️⃣ 필요한 패키지 설치
-COPY requirements.txt . 
+# 6️⃣ Install dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 7️⃣ DeepFace 캐시 디렉토리 설정 (모델 가중치 다운로드 방지)
+# 7️⃣ DeepFace cache directory
 RUN mkdir -p /root/.deepface/weights
 
-# 8️⃣ 앱 코드 복사
-COPY . .
+# 8️⃣ Copy app code only
+COPY app ./app
 
-# 9️⃣ FastAPI 서버 실행
+# 9️⃣ Start FastAPI server
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]

@@ -1,9 +1,19 @@
 version: "3.9"
 
 services:
+  ai-server:
+    build: ./ai-server
+    container_name: ai-server
+    ports:
+      - "8001:8001"
+    networks:
+      - mindlog-network
+
   backend:
     build: ./backend  # ✅ backend 폴더에서 Dockerfile 빌드
     container_name: fastapi-backend
+    env_file:
+      - ./backend/.env
     ports:
       - "8000:8000"
     depends_on:
